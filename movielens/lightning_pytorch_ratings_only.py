@@ -38,14 +38,21 @@ class MatrixFactorization(L.LightningModule):
         user_id, item_id, rating = batch
         prediction = self(user_id, item_id)
         loss = nn.functional.mse_loss(prediction, rating)
-        self.log(name='val_loss', value=loss, on_step=True, on_epoch=True, sync_dist=True, prog_bar=True)
+        self.log(name='val_loss', value=loss, on_step=False, on_epoch=True, sync_dist=True, prog_bar=True)
         return loss
     
     def test_step(self, batch, batch_idx):
         user_id, item_id, rating = batch
         prediction = self(user_id, item_id)
         loss = nn.functional.mse_loss(prediction, rating)
-        self.log(name='test_loss', value=loss, on_step=True, on_epoch=True, sync_dist=True, prog_bar=True)
+        self.log(name='test_loss', value=loss, on_step=False, on_epoch=True, sync_dist=True, prog_bar=True)
+        return loss
+    
+    def prediction_step(self, batch, batch_idx):
+        user_id, item_id, rating = batch
+        prediction = self(user_id, item_id)
+        loss = nn.functional.mse_loss(prediction, rating)
+        self.log(name='prediction_loss', value=loss, on_step=False, on_epoch=True, sync_dist=True, prog_bar=True)
         return loss
 
     def configure_optimizers(self):
@@ -113,4 +120,4 @@ if __name__ == '__main__':
     trainer.evaluate(test_dataset)
     actuals, preds = trainer.predict(test_dataset)
 
-    print(zip(actuals, preds))
+    print(list(zip(actuals, preds)))
