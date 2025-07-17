@@ -78,14 +78,16 @@ class RecSysTrainer:
         validation_loader = DataLoader(validation_dataset, batch_size=self.batch_size, num_workers=self.n_workers, persistent_workers=True)
 
         self.facto = MatrixFactorization(self.num_users, self.num_movies, embedding_dim=self.embedding_size)
+        self.facto.train()
+        
         self.model = L.Trainer(max_epochs=self.n_epochs, log_every_n_steps=128, accelerator=self.device)
         self.model.fit(self.facto, train_dataloaders=train_loader, val_dataloaders=validation_loader)
-
 
     def evaluate(self, test_dataset):
         test_loader = DataLoader(test_dataset, batch_size=self.batch_size, num_workers=self.n_workers, persistent_workers=True)
 
         if self.model is not None:
+            self.facto.eval()
             res = self.model.test(self.facto, dataloaders=test_loader)
             print(res)
 
@@ -94,6 +96,7 @@ class RecSysTrainer:
         predict_loader = DataLoader(predict_dataset, batch_size=self.batch_size, num_workers=self.n_workers, persistent_workers=True)
 
         if self.model is not None:
+            self.facto.eval()
             actuals = []
             for predict_data in predict_loader:
                 ratings = (predict_data[2].to(torch.float32).to(device=self.device))

@@ -162,7 +162,7 @@ class RecSysTrainer:
 
         if self.model is not None:
             test_loss = 0
-            self.model.train(False)
+            self.model.eval()
             step_count = 0
 
             for i, test_data in enumerate(test_loader):
@@ -189,7 +189,7 @@ class RecSysTrainer:
 
         if self.model is not None:
             predict_loss = 0
-            self.model.train(False)
+            self.model.eval()
             step_count = 0
 
             actuals, preds = [], []
