@@ -185,7 +185,7 @@ if __name__ == '__main__':
     test_dataset = MovieLensRatingsOnlyDataset(data_path=os.path.join(out_dir, 'test.csv'))
     validation_dataset = MovieLensRatingsOnlyDataset(data_path=os.path.join(out_dir, 'validation.csv'))
 
-    trainer = RecSysTrainer(n_users, n_movies)
+    trainer = RecSysTrainer(n_users, n_movies, embedding_size=256, hidden_dim_size=256, dropout_rate=0.2, n_epochs=10)
     trainer.train(train_dataset, validation_dataset)
     trainer.evaluate(test_dataset)
     actuals, preds = trainer.predict(test_dataset)
