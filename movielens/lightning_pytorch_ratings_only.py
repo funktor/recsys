@@ -9,6 +9,8 @@ import sys
 import joblib
 from prepare_training_data import ratings_only_datasets
 from custom_datasets import MovieLensRatingsOnlyDataset
+from pytorch_lightning.callbacks import ModelCheckpoint
+import uuid
 
 base_dir = os.path.abspath(os.path.dirname(__file__))
 
@@ -71,6 +73,8 @@ class RecSysTrainer:
         self.device = device
         self.model = None
         self.facto = None
+        self.run_id = str(uuid.uuid4())
+        self.model_dir = os.path.join(base_dir, 'models-lightning')
 
 
     def train(self, train_dataset, validation_dataset):
@@ -79,12 +83,19 @@ class RecSysTrainer:
 
         self.facto = MatrixFactorization(self.num_users, self.num_movies, embedding_dim=self.embedding_size)
         self.facto.train()
-        
-        self.model = L.Trainer(max_epochs=self.n_epochs, log_every_n_steps=128, accelerator=self.device)
+
+        checkpoint_callback = ModelCheckpoint(monitor='val_loss', 
+                                       dirpath=self.model_dir, 
+                                       filename='best_model', 
+                                       save_top_k=1)
+
+        self.model = L.Trainer(max_epochs=self.n_epochs, log_every_n_steps=128, accelerator=self.device, callbacks=[checkpoint_callback])
         self.model.fit(self.facto, train_dataloaders=train_loader, val_dataloaders=validation_loader)
 
     def evaluate(self, test_dataset):
         test_loader = DataLoader(test_dataset, batch_size=self.batch_size, num_workers=self.n_workers, persistent_workers=True)
+        if self.model is None:
+            self.model = self.facto.load_from_checkpoint(os.path.join(self.model_dir, 'best_model.ckpt'))
 
         if self.model is not None:
             self.facto.eval()
@@ -94,6 +105,9 @@ class RecSysTrainer:
 
     def predict(self, predict_dataset):
         predict_loader = DataLoader(predict_dataset, batch_size=self.batch_size, num_workers=self.n_workers, persistent_workers=True)
+
+        if self.model is None:
+            self.model = self.facto.load_from_checkpoint(os.path.join(self.model_dir, 'best_model.ckpt'))
 
         if self.model is not None:
             self.facto.eval()
