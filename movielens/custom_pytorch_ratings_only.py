@@ -9,12 +9,24 @@ import sys
 import joblib
 from prepare_training_data import ratings_only_datasets
 from custom_datasets import MovieLensRatingsOnlyDataset
+import uuid
 
 base_dir = os.path.abspath(os.path.dirname(__file__))
 
 def log_progress(epoch, n_epochs, step, avg_loss, data_size):
     sys.stderr.write(f"\r{epoch+1:02d}/{n_epochs:02d} | Step: {step}/{data_size} | Batch Loss: {avg_loss:<6.9f}")
     sys.stderr.flush()
+
+def checkpoint(model:nn.Module, optimizer:torch.optim.Optimizer, filename):
+    torch.save({'optimizer':optimizer.state_dict(), 'model':model.state_dict()}, filename)
+    
+def load_model(filename):
+    chkpt = torch.load(filename)
+    model:nn.Module = chkpt['model']
+    optimizer:torch.optim.Optimizer = chkpt['optimizer']
+    model.load_state_dict()
+    optimizer.load_state_dict()
+    return model, optimizer
     
 class RecSysModel(nn.Module):
     def __init__(
@@ -64,6 +76,8 @@ class RecSysTrainer:
         self.n_workers = n_workers
         self.n_epochs = n_epochs
         self.device = device
+        self.run_id = str(uuid.uuid4())
+        self.model_dir = os.path.join(base_dir, 'models')
         self.model = None
 
 
@@ -106,7 +120,7 @@ class RecSysTrainer:
 
                 if (step_count % log_progress_step == 0 or i == len(train_loader) - 1):
                     log_progress(e, self.n_epochs, step_count, loss/len(train_data[0]), train_dataset_size)
-            
+                        
             print()
             print(f"Training loss after epoch {e+1} = {train_loss/train_dataset_size}")
 
@@ -126,9 +140,25 @@ class RecSysTrainer:
             print(f"Validation loss after epoch {e+1} = {validation_loss/len(validation_dataset)}")
             print()
 
+            print("Checkpointing...")
+            path = os.path.join(self.model_dir, self.run_id)
+            os.makedirs(path, exist_ok=True)
+            checkpoint(self.model, optimizer, os.path.join(path, f"checkpoint-epoch-{e}.ckpt"))
+        
+        print("Saving model...")
+        path = os.path.join(self.model_dir, self.run_id)
+        os.makedirs(path, exist_ok=True)
+        checkpoint(self.model, optimizer, os.path.join(path, f"final_model.ckpt"))
+
 
     def evaluate(self, test_dataset):
         test_loader = DataLoader(test_dataset, batch_size=self.batch_size, num_workers=self.n_workers, persistent_workers=True)
+
+        if self.model is None:
+            path = os.path.join(self.model_dir, self.run_id)
+            if os.path.exists(path):
+                print("Loading model...")
+                self.model, _ = load_model(os.path.join(path, f"final_model.ckpt"))
 
         if self.model is not None:
             test_loss = 0
@@ -150,6 +180,12 @@ class RecSysTrainer:
 
     def predict(self, predict_dataset):
         predict_loader = DataLoader(predict_dataset, batch_size=self.batch_size, num_workers=self.n_workers, persistent_workers=True)
+
+        if self.model is None:
+            path = os.path.join(self.model_dir, self.run_id)
+            if os.path.exists(path):
+                print("Loading model...")
+                self.model, _ = load_model(os.path.join(path, f"final_model.ckpt"))
 
         if self.model is not None:
             predict_loss = 0
