@@ -1,0 +1,4 @@
+datasets/
+lightning_logs/
+training_data/
+**/*.pkl
