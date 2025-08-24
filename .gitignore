@@ -3,3 +3,6 @@ lightning_logs/
 training_data/
 models/
 **/*.pkl
+dist/
+build/
+.vscode/
