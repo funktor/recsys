@@ -1,0 +1,4 @@
+Metadata-Version: 2.1
+Name: extension-cpp
+Version: 0.0.2
+Summary: Example of PyTorch C++ and CUDA extensions

@@ -2,7 +2,7 @@ import torch
 import extension_cpp
 import time
 
-a = torch.randn(10000, 1000, dtype=torch.float32)
+a = torch.randn(1000000, 10, dtype=torch.float32)
 
 start = time.time()*1000
 b1 = torch.nn.functional.softmax(a, dim=-1, dtype=torch.float32)

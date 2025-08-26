@@ -132,7 +132,7 @@ namespace extension_cpp {
     }
 
     PYBIND11_MODULE(extension_cpp, m) {
-        m.def("mysoftmax", &softmax_cpu, "LLTM forward 3");
+        m.def("mysoftmax", &softmax_cpu, "LLTM forward 4");
     }
 
     // TORCH_LIBRARY(extension_cpp, m) {
