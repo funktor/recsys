@@ -8,6 +8,7 @@ from setuptools import find_packages, setup
 
 from torch.utils.cpp_extension import (
     CppExtension,
+    CUDAExtension,
     BuildExtension,
 )
 
@@ -16,9 +17,9 @@ setup(
     version="0.0.2",
     packages=find_packages(),
     ext_modules=[
-        CppExtension(
+        CUDAExtension(
             "extension_cpp",
-            ["pytorch_c_ext.cpp"],
+            ["pytorch_c_ext.cpp", "mysoftmax.cu"],
             extra_compile_args={
                 "cxx": ["-O3", "-ltbb"]
             },
