@@ -14,14 +14,15 @@ from torch.utils.cpp_extension import (
 
 setup(
     name="extension_cpp",
-    version="0.0.2",
+    version="0.0.5",
     packages=find_packages(),
     ext_modules=[
         CUDAExtension(
             "extension_cpp",
             ["pytorch_c_ext.cpp", "mysoftmax.cu"],
             extra_compile_args={
-                "cxx": ["-O3", "-ltbb"]
+                "nvcc": ["-arch=sm_89", "-O3"],
+                "cxx": ["-O3", "-ltbb", "-Wall"]
             },
             extra_link_args=["-ltbb"],
             include_dirs=[
