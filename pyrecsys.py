@@ -837,7 +837,7 @@ def test_model(df_test:pd.DataFrame, rec:nn.Module, batch_size = 1024, model_dir
     
 if __name__ == '__main__':
     run_id = str(uuid.uuid4())
-    df = read_ml_32m_data('/Users/amondal/recsys/datasets/ml-32m')
+    df = read_ml_32m_data('/home/abhijit/recsys/datasets/ml-32m')
     df = ohe_genres(df)
     df_train, df_val, df_test = split_train_test(df)
     rec = train_and_validate_model(df_train, df_val, run_id=run_id)

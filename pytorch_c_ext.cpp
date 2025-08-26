@@ -65,6 +65,8 @@
 //     }
 // }
 
+void softmax_cuda_launcher(float *inp, float *out, const unsigned long n, const unsigned long m);
+
 namespace extension_cpp {
     void softmax(const float *inp, float *out, const unsigned long n, const unsigned long m) {
         float *max_per_row = new float[n];
@@ -131,8 +133,31 @@ namespace extension_cpp {
         return c;
     }
 
+    torch::Tensor softmax_gpu(const torch::Tensor &a) {
+        // Input validation
+        TORCH_CHECK(a.device().is_cuda(), "Input tensor a must be a CUDA tensor");
+        TORCH_CHECK(a.is_contiguous(), "Input tensor a must be contiguous");
+        TORCH_CHECK(a.dtype() == torch::kFloat32, "Input tensor a must be float32");
+    
+        // Create the output tensor on the same device as input
+        torch::Tensor c = torch::empty_like(a);
+        unsigned long n = a.size(0); // Total number of elements
+        unsigned long m = a.size(1);
+    
+        // Call the CUDA launcher function
+        softmax_cuda_launcher(
+            a.data_ptr<float>(),
+            c.data_ptr<float>(),
+            n, 
+            m
+        );
+    
+        return c;
+    }
+
     PYBIND11_MODULE(extension_cpp, m) {
         m.def("mysoftmax", &softmax_cpu, "LLTM forward 3");
+        m.def("mysoftmax_gpu", &softmax_gpu, "LLTM forward 4");
     }
 
     // TORCH_LIBRARY(extension_cpp, m) {
@@ -159,4 +184,3 @@ namespace extension_cpp {
 
 //     std::cout << "Duration = " << duration.count() << " ms" << std::endl;
 // }
-
