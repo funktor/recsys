@@ -36,13 +36,11 @@ void softmax_cuda(float *inp, float *out, const unsigned long n, const unsigned 
     }
 
     for (unsigned int i = threadIdx.x; i < COARSE_FACTOR*blockDim.x; i += blockDim.x) {
-        unsigned int index = COARSE_FACTOR*blockIdx.x*blockDim.x + i;
         unsigned int r = i/m;
         atomicMax(&max_per_row[r], inp_shared[i]);
     }
 
     for (unsigned int i = threadIdx.x; i < COARSE_FACTOR*blockDim.x; i += blockDim.x) {
-        unsigned int index = COARSE_FACTOR*blockIdx.x*blockDim.x + i;
         unsigned int r = i/m;
         atomicAdd(&sum_per_row[r], exp(inp_shared[i]-max_per_row[r]));
     }

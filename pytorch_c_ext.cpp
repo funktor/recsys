@@ -157,9 +157,6 @@ namespace extension_cpp {
 
     PYBIND11_MODULE(extension_cpp, m) {
         m.def("mysoftmax", &softmax_cpu, "LLTM forward 3");
-    }
-
-    PYBIND11_MODULE(extension_cpp, m) {
         m.def("mysoftmax_gpu", &softmax_gpu, "LLTM forward 4");
     }
 
