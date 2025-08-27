@@ -8,7 +8,6 @@ from setuptools import find_packages, setup
 
 from torch.utils.cpp_extension import (
     CppExtension,
-    CUDAExtension,
     BuildExtension,
 )
 
@@ -17,18 +16,20 @@ setup(
     version="0.0.51",
     packages=find_packages(),
     ext_modules=[
-        CUDAExtension(
+        CppExtension(
             "extension_cpp",
-            ["pytorch_c_ext.cpp", "mysoftmax.cu"],
+            ["pytorch_c_ext.cpp"],
             extra_compile_args={
                 "cxx": ["-O3", "-ltbb"]
             },
             extra_link_args=["-ltbb"],
             include_dirs=[
-                "/opt/python/3.10/include/python3.10",
-                "/usr/include"
+                "/opt/homebrew/opt/python@3.13/Frameworks/Python.framework/Versions/3.13/include/python3.13", 
+                "/Users/amondal/recsys/.venv/lib/python3.13/site-packages/torch/include/torch/csrc/api/include",
+                "/Users/amondal/recsys/.venv/lib/python3.13/site-packages/torch/include",
+                "/opt/homebrew/opt/tbb/include"
             ],
-            library_dirs=["/usr/lib/x86_64-linux-gnu/"]
+            library_dirs=["/opt/homebrew/opt/tbb/lib"]
         )
     ],
     install_requires=["torch"],
