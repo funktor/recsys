@@ -184,4 +184,3 @@ namespace extension_cpp {
 
 //     std::cout << "Duration = " << duration.count() << " ms" << std::endl;
 // }
-

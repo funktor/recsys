@@ -34,7 +34,7 @@
 #include <math.h>
 #include <assert.h>
 
-#define COARSE_FACTOR 4
+#define COARSE_FACTOR 8
 #define BLOCK_WIDTH 1024
 #define MODIFIED_BLOCK_WIDTH COARSE_FACTOR*BLOCK_WIDTH
 
@@ -69,61 +69,81 @@ static float atomicMax(float* address, float val)
 }
 
 __global__
-void softmax_cuda(float *inp, float *max_per_row, float *sum_per_row, float *out, const unsigned long n, const unsigned long m) {
-    extern __shared__ float inp_shared[];
+void softmax_cuda(float *inp, float *out, const unsigned long n, const unsigned long m) {
+    unsigned int row_index = blockIdx.x*blockDim.x + threadIdx.x;
 
-    for (unsigned int i = threadIdx.x; i < COARSE_FACTOR*blockDim.x; i += blockDim.x) {
-        unsigned int index = COARSE_FACTOR*blockIdx.x*blockDim.x + i;
-        unsigned int r = index/m;
+    if (row_index < n) {
+        float max_val = -MAXFLOAT;
+        float sum_val = 0.0f;
 
-        if (index < n*m) {
-            inp_shared[i] = inp[index]; 
-            max_per_row[r] = -MAXFLOAT;
-            sum_per_row[r] = 0.0f;
+        for (unsigned int i = 0; i < m; i++) {
+            max_val = (max_val < inp[row_index*m+i])?inp[row_index*m+i]:max_val;
         }
-        else inp_shared[i] = 0.0f;
-    }
 
-    __syncthreads();
+        for (unsigned int i = 0; i < m; i++) {
+            sum_val += exp(inp[row_index*m+i]-max_val);
+        }
 
-    for (unsigned int i = threadIdx.x; i < COARSE_FACTOR*blockDim.x; i += blockDim.x) {
-        unsigned int index = COARSE_FACTOR*blockIdx.x*blockDim.x + i;
-        if (index < n*m) {
-            unsigned int r = index/m;
-            atomicMax(&max_per_row[r], inp_shared[i]);
+        for (unsigned int i = 0; i < m; i++) {
+            out[row_index*m+i] = exp(inp[row_index*m+i]-max_val)/sum_val;
         }
     }
+    
 
-    __syncthreads();
+    // extern __shared__ float inp_shared[];
 
-    for (unsigned int i = threadIdx.x; i < COARSE_FACTOR*blockDim.x; i += blockDim.x) {
-        unsigned int index = COARSE_FACTOR*blockIdx.x*blockDim.x + i;
-        if (index < n*m) {
-            unsigned int r = index/m;
-            atomicAdd(&sum_per_row[r], exp(inp_shared[i]-max_per_row[r]));
-        }
-    }
+    // for (unsigned int i = threadIdx.x; i < COARSE_FACTOR*blockDim.x; i += blockDim.x) {
+    //     unsigned int index = COARSE_FACTOR*blockIdx.x*blockDim.x + i;
+    //     unsigned int r = index/m;
 
-    __syncthreads();
+    //     if (index < n*m) {
+    //         inp_shared[i] = inp[index]; 
+    //         max_per_row[r] = -MAXFLOAT;
+    //         sum_per_row[r] = 0.0f;
+    //     }
+    //     else inp_shared[i] = 0.0f;
+    // }
 
-    for (unsigned int i = threadIdx.x; i < COARSE_FACTOR*blockDim.x; i += blockDim.x) {
-        unsigned int index = COARSE_FACTOR*blockIdx.x*blockDim.x + i;
-        if (index < n*m) {
-            unsigned int r = index/m;
-            out[index] = exp(inp_shared[i]-max_per_row[r])/sum_per_row[r];
-        }
-    }
+    // __syncthreads();
+
+    // for (unsigned int i = threadIdx.x; i < COARSE_FACTOR*blockDim.x; i += blockDim.x) {
+    //     unsigned int index = COARSE_FACTOR*blockIdx.x*blockDim.x + i;
+    //     if (index < n*m) {
+    //         unsigned int r = index/m;
+    //         atomicMax(&max_per_row[r], inp_shared[i]);
+    //     }
+    // }
+
+    // __syncthreads();
+
+    // for (unsigned int i = threadIdx.x; i < COARSE_FACTOR*blockDim.x; i += blockDim.x) {
+    //     unsigned int index = COARSE_FACTOR*blockIdx.x*blockDim.x + i;
+    //     if (index < n*m) {
+    //         unsigned int r = index/m;
+    //         atomicAdd(&sum_per_row[r], exp(inp_shared[i]-max_per_row[r]));
+    //     }
+    // }
+
+    // __syncthreads();
+
+    // for (unsigned int i = threadIdx.x; i < COARSE_FACTOR*blockDim.x; i += blockDim.x) {
+    //     unsigned int index = COARSE_FACTOR*blockIdx.x*blockDim.x + i;
+    //     if (index < n*m) {
+    //         unsigned int r = index/m;
+    //         out[index] = exp(inp_shared[i]-max_per_row[r])/sum_per_row[r];
+    //     }
+    // }
 }
 
 void softmax_cuda_launcher(float *inp, float *out, const unsigned long n, const unsigned long m) {
-    float *max_per_row, *sum_per_row;
-
-    cudaMallocManaged(&max_per_row, n*sizeof(float));
-    cudaMallocManaged(&sum_per_row, n*sizeof(float));
-
-    unsigned int num_blocks = int(ceil(float(n*m)/MODIFIED_BLOCK_WIDTH));
-    softmax_cuda<<<num_blocks, BLOCK_WIDTH, MODIFIED_BLOCK_WIDTH*sizeof(float)>>>(inp, max_per_row, sum_per_row, out, n, m);
+    unsigned int num_blocks = int(ceil(float(n)/BLOCK_WIDTH));
+    softmax_cuda<<<num_blocks, BLOCK_WIDTH>>>(inp, out, n, m);
     cudaDeviceSynchronize();
+
+    // cudaError_t err = cudaGetLastError();
+    // if (err != cudaSuccess) {
+    //     fprintf(stderr, "CUDA error: %s\n", cudaGetErrorString(err));
+    // }
 }
 
 int main(int argc, char *argv[]) {
@@ -137,6 +157,10 @@ int main(int argc, char *argv[]) {
 
     generate_data(x, n, m);
 
+    auto start = std::chrono::high_resolution_clock::now();
     softmax_cuda_launcher(x, y, n, m);
-    print_vector(y, 0, 10);
+    auto stop = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
+
+    std::cout << "Duration = " << duration.count() << " ms" << std::endl;
 }
