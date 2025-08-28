@@ -34,10 +34,7 @@
 #include <math.h>
 #include <assert.h>
 
-#define COARSE_FACTOR 1
-#define BLOCK_WIDTH 1024
 #define BLOCK_WIDTH_PER_DIM 32
-#define MODIFIED_BLOCK_WIDTH COARSE_FACTOR*BLOCK_WIDTH
 
 void generate_data(float *x, unsigned int n, unsigned int m) {
     std::random_device rd;
@@ -69,64 +66,47 @@ __device__ __forceinline__ float atomicMaxF32(float *address, float val) {
 
 __global__
 void softmax_cuda(float *inp, float *out, const unsigned long n, const unsigned long m) {
-    // unsigned int row_index = blockIdx.x*blockDim.x + threadIdx.x;
-
-    // if (row_index < n) {
-    //     float max_val = -MAXFLOAT;
-    //     float sum_val = 0.0f;
-
-    //     for (unsigned int i = 0; i < m; i++) {
-    //         max_val = (max_val < inp[row_index*m+i])?inp[row_index*m+i]:max_val;
-    //     }
-
-    //     for (unsigned int i = 0; i < m; i++) {
-    //         sum_val += exp(inp[row_index*m+i]-max_val);
-    //     }
-
-    //     for (unsigned int i = 0; i < m; i++) {
-    //         out[row_index*m+i] = exp(inp[row_index*m+i]-max_val)/sum_val;
-    //     }
-    // }
-    
-    unsigned int col = blockIdx.x*blockDim.x + threadIdx.x;
     unsigned int row = blockIdx.y*blockDim.y + threadIdx.y;
 
+    unsigned long p = (m+BLOCK_WIDTH_PER_DIM-1)/BLOCK_WIDTH_PER_DIM;
     extern __shared__ float inp_shared[];
 
-    unsigned int max_per_row_offset = BLOCK_WIDTH*BLOCK_WIDTH;
-    unsigned int sum_per_row_offset = BLOCK_WIDTH*BLOCK_WIDTH + BLOCK_WIDTH;
-    unsigned int i = threadIdx.y*BLOCK_WIDTH + threadIdx.x;
+    if (row < n) {
+        if (threadIdx.x == 0) {
+            inp_shared[threadIdx.y] = -MAXFLOAT;
+            inp_shared[BLOCK_WIDTH_PER_DIM + threadIdx.y] = 0.0f;
+        }
+        __syncthreads();
 
-    if (row < n && col < m) {
-        inp_shared[i] = inp[row*m + col];
-        inp_shared[max_per_row_offset + row] = -MAXFLOAT;
-        inp_shared[sum_per_row_offset + row] = 0.0f;
-    }
+        for (unsigned long j = threadIdx.x; j < p*BLOCK_WIDTH_PER_DIM; j += p) {
+            if (j < m) {
+                atomicMaxF32(&inp_shared[threadIdx.y], inp[row*m + j]);
+            }
+        }
 
-    __syncthreads();
+        __syncthreads();
 
-    if (row < n && col < m) {
-        atomicMaxF32(&inp_shared[max_per_row_offset + row], inp_shared[i]);
-    }
+        for (unsigned long j = threadIdx.x; j < p*BLOCK_WIDTH_PER_DIM; j += p) {
+            if (j < m) {
+                atomicAdd(&inp_shared[BLOCK_WIDTH_PER_DIM + threadIdx.y], exp(inp[row*m + j]-inp_shared[threadIdx.y]));
+            }
+        }
 
-    __syncthreads();
+        __syncthreads();
 
-    if (row < n && col < m) {
-        atomicAdd(&inp_shared[sum_per_row_offset + row], exp(inp_shared[i]-inp_shared[max_per_row_offset + row]));
-    }
-
-    __syncthreads();
-
-    if (row < n && col < m) {
-        out[row*m + col] = exp(inp_shared[i]-inp_shared[max_per_row_offset + row])/inp_shared[sum_per_row_offset + row];
+        for (unsigned long j = threadIdx.x; j < p*BLOCK_WIDTH_PER_DIM; j += p) {
+            if (j < m) {
+                out[row*m + j] = exp(inp[row*m + j]-inp_shared[threadIdx.y])/inp_shared[BLOCK_WIDTH_PER_DIM + threadIdx.y];
+            }
+        }
     }
 }
 
 void softmax_cuda_launcher(float *inp, float *out, const unsigned long n, const unsigned long m) {
     dim3 bd(BLOCK_WIDTH_PER_DIM, BLOCK_WIDTH_PER_DIM, 1);
-    dim3 gd((m+BLOCK_WIDTH_PER_DIM-1)/BLOCK_WIDTH_PER_DIM, (n+BLOCK_WIDTH_PER_DIM-1)/BLOCK_WIDTH_PER_DIM, 1);
+    dim3 gd(1, (n+BLOCK_WIDTH_PER_DIM-1)/BLOCK_WIDTH_PER_DIM, 1);
 
-    softmax_cuda<<<gd, bd, (BLOCK_WIDTH*BLOCK_WIDTH + 2*BLOCK_WIDTH)*sizeof(float)>>>(inp, out, n, m);
+    softmax_cuda<<<gd, bd, 2*BLOCK_WIDTH_PER_DIM*sizeof(float)>>>(inp, out, n, m);
     cudaDeviceSynchronize();
 
     cudaError_t err = cudaGetLastError();
