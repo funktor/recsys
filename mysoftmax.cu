@@ -36,22 +36,22 @@
 
 #define BLOCK_WIDTH_PER_DIM 32
 
-void generate_data(float *x, unsigned int n, unsigned int m) {
-    std::random_device rd;
-    std::mt19937 engine(rd());
+// void generate_data(float *x, unsigned int n, unsigned int m) {
+//     std::random_device rd;
+//     std::mt19937 engine(rd());
 
-    std::uniform_real_distribution<float> dist(0.0, 1.0);
+//     std::uniform_real_distribution<float> dist(0.0, 1.0);
 
-    for (unsigned int i = 0; i < n; i++) {
-        for (unsigned int j = 0; j < m; j++) x[i*m+j] = dist(engine);
-    }
-}
+//     for (unsigned int i = 0; i < n; i++) {
+//         for (unsigned int j = 0; j < m; j++) x[i*m+j] = dist(engine);
+//     }
+// }
 
-void print_vector(float *x, int start, int end) {
-    std::cout << "[";
-    for (int i = start; i <= end; i++) std::cout << x[i] << ", ";
-    std::cout << "]" << std::endl;
-}
+// void print_vector(float *x, int start, int end) {
+//     std::cout << "[";
+//     for (int i = start; i <= end; i++) std::cout << x[i] << ", ";
+//     std::cout << "]" << std::endl;
+// }
 
 __device__ __forceinline__ float atomicMaxF32(float *address, float val) {
     int ret = __float_as_int(*address);
@@ -114,21 +114,21 @@ void softmax_cuda_launcher(float *inp, float *out, const unsigned long n, const 
     }
 }
 
-int main(int argc, char *argv[]) {
-    unsigned int n = 10000;
-    unsigned int m = 1000;
+// int main(int argc, char *argv[]) {
+//     unsigned int n = 10000;
+//     unsigned int m = 1000;
 
-    float *x, *y;
+//     float *x, *y;
 
-    cudaMallocManaged(&x, n*m*sizeof(float));
-    cudaMallocManaged(&y, n*m*sizeof(float));
+//     cudaMallocManaged(&x, n*m*sizeof(float));
+//     cudaMallocManaged(&y, n*m*sizeof(float));
 
-    generate_data(x, n, m);
+//     generate_data(x, n, m);
 
-    auto start = std::chrono::high_resolution_clock::now();
-    softmax_cuda_launcher(x, y, n, m);
-    auto stop = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
+//     auto start = std::chrono::high_resolution_clock::now();
+//     softmax_cuda_launcher(x, y, n, m);
+//     auto stop = std::chrono::high_resolution_clock::now();
+//     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
 
-    std::cout << "Duration = " << duration.count() << " ms" << std::endl;
-}
+//     std::cout << "Duration = " << duration.count() << " ms" << std::endl;
+// }

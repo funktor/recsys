@@ -18,3 +18,23 @@ end = time.time()*1000
 print(end-start)
 
 print(b2)
+
+
+class MySoftmaxFunction(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, input:torch.Tensor):
+        output:torch.Tensor = extension_cpp.mysoftmax_cpu(input.contiguous())
+        ctx.save_for_backward(output.contiguous())
+        return output
+
+    @staticmethod
+    def backward(ctx, grad:torch.Tensor):
+        output = extension_cpp.mysoftmax_cpu_grad(grad.contiguous(), *ctx.saved_tensors)
+        return output
+    
+class MySoftmax(torch.nn.Module):
+    def __init__(self):
+        super(MySoftmax, self).__init__()
+
+    def forward(self, input):
+        return MySoftmaxFunction.apply(input)
