@@ -66,8 +66,7 @@ __device__ __forceinline__ float atomicMaxF32(float *address, float val) {
 
 __global__
 void softmax_cuda(float *inp, float *out, const unsigned long n, const unsigned long m) {
-    unsigned int row = blockIdx.y*blockDim.y + threadIdx.y;
-
+    unsigned long row = blockIdx.y*blockDim.y + threadIdx.y;
     unsigned long p = (m+BLOCK_WIDTH_PER_DIM-1)/BLOCK_WIDTH_PER_DIM;
     extern __shared__ float inp_shared[];
 
@@ -78,7 +77,7 @@ void softmax_cuda(float *inp, float *out, const unsigned long n, const unsigned 
         }
         __syncthreads();
 
-        for (unsigned long j = threadIdx.x; j < p*BLOCK_WIDTH_PER_DIM; j += p) {
+        for (unsigned long j = threadIdx.x; j < p*BLOCK_WIDTH_PER_DIM; j += BLOCK_WIDTH_PER_DIM) {
             if (j < m) {
                 atomicMaxF32(&inp_shared[threadIdx.y], inp[row*m + j]);
             }
@@ -86,7 +85,7 @@ void softmax_cuda(float *inp, float *out, const unsigned long n, const unsigned 
 
         __syncthreads();
 
-        for (unsigned long j = threadIdx.x; j < p*BLOCK_WIDTH_PER_DIM; j += p) {
+        for (unsigned long j = threadIdx.x; j < p*BLOCK_WIDTH_PER_DIM; j += BLOCK_WIDTH_PER_DIM) {
             if (j < m) {
                 atomicAdd(&inp_shared[BLOCK_WIDTH_PER_DIM + threadIdx.y], exp(inp[row*m + j]-inp_shared[threadIdx.y]));
             }
@@ -94,7 +93,7 @@ void softmax_cuda(float *inp, float *out, const unsigned long n, const unsigned 
 
         __syncthreads();
 
-        for (unsigned long j = threadIdx.x; j < p*BLOCK_WIDTH_PER_DIM; j += p) {
+        for (unsigned long j = threadIdx.x; j < p*BLOCK_WIDTH_PER_DIM; j += BLOCK_WIDTH_PER_DIM) {
             if (j < m) {
                 out[row*m + j] = exp(inp[row*m + j]-inp_shared[threadIdx.y])/inp_shared[BLOCK_WIDTH_PER_DIM + threadIdx.y];
             }
