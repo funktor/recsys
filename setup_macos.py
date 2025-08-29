@@ -13,14 +13,13 @@ from torch.utils.cpp_extension import (
 
 setup(
     name="extension_cpp",
-    version="0.0.3",
+    version="0.1.1",
     packages=find_packages(),
     ext_modules=[
         CppExtension(
             "extension_cpp",
             ["pytorch_c_ext.cpp"],
             extra_compile_args={
-                "nvcc": ["-Xcompiler=-O3"],
                 "cxx": ["-O3", "-ltbb", "-Wall"]
             },
             extra_link_args=["-ltbb"],

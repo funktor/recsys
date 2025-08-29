@@ -34,37 +34,8 @@
 #include <assert.h>
 #include <initializer_list>
 
-extern "C" {
-    /* Creates a dummy empty _C module that can be imported from Python.
-       The import from Python will load the .so consisting of this file
-       in this extension, so that the TORCH_LIBRARY static initializers
-       below are run. */
-    PyObject* PyInit__C(void)
-    {
-        static struct PyModuleDef module_def = {
-            PyModuleDef_HEAD_INIT,
-            "_C",   /* name of module */
-            NULL,   /* module documentation, may be NULL */
-            -1,     /* size of per-interpreter state of the module,
-                       or -1 if the module keeps state in global variables. */
-            NULL,   /* methods */
-        };
-        return PyModule_Create(&module_def);
-    }
-}
-
 void softmax_cuda_launcher(float *inp, float *out, const unsigned long n, const unsigned long m);
-
-// void generate_data(float *x, const unsigned long n, const unsigned long m) {
-//     std::random_device rd;
-//     std::mt19937 engine(rd());
-
-//     std::uniform_real_distribution<float> dist(0.0, 1.0);
-
-//     for (unsigned int i = 0; i < n; i++) {
-//         for (unsigned int j = 0; j < m; j++) x[i*m+j] = dist(engine);
-//     }
-// }
+void softmax_cuda_grad_launcher(const float *grad, const float *fwd, float *out, const unsigned long n, const unsigned long m);
 
 namespace extension_cpp {
     void softmax(const float *inp, float *out, const unsigned long n, const unsigned long m) {
@@ -85,7 +56,7 @@ namespace extension_cpp {
             [&max_per_row, &inp, m](tbb::blocked_range<size_t> r) {
             for (auto i = r.begin(); i < r.end(); i++) {
                 for (unsigned long j = 0; j < m; j++) {
-                    max_per_row[i] = std::max(max_per_row[i], inp[i]);
+                    max_per_row[i] = std::max(max_per_row[i], inp[i*m+j]);
                 }
             }
         });
@@ -95,7 +66,7 @@ namespace extension_cpp {
             [&sum_per_row, &max_per_row, &inp, m](tbb::blocked_range<size_t> r) {
             for (auto i = r.begin(); i < r.end(); i++) {
                 for (unsigned long j = 0; j < m; j++) {
-                    sum_per_row[i] += exp(inp[i]-max_per_row[i]);
+                    sum_per_row[i] += exp(inp[i*m+j]-max_per_row[i]);
                 }
             }
         });
@@ -212,39 +183,40 @@ namespace extension_cpp {
         return c;
     }
 
-    // PYBIND11_MODULE(extension_cpp, m) {
-    //     m.def("mysoftmax", &softmax_cpu, "LLTM forward 3");
-    //     m.def("mysoftmax_gpu", &softmax_gpu, "LLTM forward 4");
-    // }
+    torch::Tensor softmax_gpu_grad(const torch::Tensor &grad, const torch::Tensor &fwd_out) {
+        // Input validation
+        TORCH_CHECK(fwd_out.device().is_cpu(), "Input tensor fwd_out must be a CPU tensor");
+        TORCH_CHECK(grad.device().is_cpu(), "Input tensor grad must be a CPU tensor");
 
-    TORCH_LIBRARY(extension_cpp, m) {
-        m.def("mysoftmax_cpu(Tensor a) -> Tensor");
-        m.def("mysoftmax_gpu(Tensor a) -> Tensor");
-        m.def("mysoftmax_gpu_grad(Tensor grad, Tensor a) -> Tensor");
-    }
+        TORCH_CHECK(fwd_out.is_contiguous(), "Input tensor fwd_out must be contiguous");
+        TORCH_CHECK(grad.is_contiguous(), "Input tensor grad must be contiguous");
+
+        TORCH_CHECK(fwd_out.dtype() == torch::kFloat32, "Input tensor fwd_out must be float32");
+        TORCH_CHECK(grad.dtype() == torch::kFloat32, "Input tensor grad must be float32");
+
+        TORCH_CHECK(grad.size(0) == fwd_out.size(0) && grad.size(1) == fwd_out.size(1), "Mismatched shapes");
     
-    TORCH_LIBRARY_IMPL(extension_cpp, CPU, m) {
-        m.impl("mysoftmax_cpu", &softmax_cpu);
-        m.impl("mysoftmax_cpu_grad", &softmax_cpu_grad);
+        // Create the output tensor on the same device as input
+        torch::Tensor c = torch::empty_like(grad);
+        unsigned long n = grad.size(0); // Total number of elements
+        unsigned long m = grad.size(1);
+    
+        // Call the CUDA launcher function
+        softmax_cuda_grad_launcher(
+            grad.data_ptr<float>(),
+            fwd_out.data_ptr<float>(),
+            c.data_ptr<float>(),
+            n, 
+            m
+        );
+    
+        return c;
     }
 
-    TORCH_LIBRARY_IMPL(extension_cpp, CUDA, m) {
-        m.impl("mysoftmax_gpu", &softmax_gpu);
+    PYBIND11_MODULE(extension_cpp, m) {
+        m.def("mysoftmax_cpu", &softmax_cpu, "Softmax CPU Forward");
+        m.def("mysoftmax_gpu", &softmax_gpu, "Softmax GPU Forward");
+        m.def("mysoftmax_cpu_grad", &softmax_cpu_grad, "Softmax CPU Backward");
+        m.def("mysoftmax_gpu_grad", &softmax_gpu_grad, "Softmax GPU Backward");
     }
 }
-
-// int main(int argc, char *argv[]) {
-//     unsigned int n = 10000;
-//     unsigned int m = 1000;
-
-//     float *x = new float[n*m];
-//     float *y = new float[n*m];
-//     generate_data(x, n, m);
-
-//     auto start = std::chrono::high_resolution_clock::now();
-//     extension_cpp::softmax(x, y, n, m);
-//     auto stop = std::chrono::high_resolution_clock::now();
-//     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
-
-//     std::cout << "Duration = " << duration.count() << " ms" << std::endl;
-// }

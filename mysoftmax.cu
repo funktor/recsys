@@ -36,23 +36,6 @@
 
 #define BLOCK_WIDTH_PER_DIM 32
 
-// void generate_data(float *x, unsigned int n, unsigned int m) {
-//     std::random_device rd;
-//     std::mt19937 engine(rd());
-
-//     std::uniform_real_distribution<float> dist(0.0, 1.0);
-
-//     for (unsigned int i = 0; i < n; i++) {
-//         for (unsigned int j = 0; j < m; j++) x[i*m+j] = dist(engine);
-//     }
-// }
-
-// void print_vector(float *x, int start, int end) {
-//     std::cout << "[";
-//     for (int i = start; i <= end; i++) std::cout << x[i] << ", ";
-//     std::cout << "]" << std::endl;
-// }
-
 __device__ __forceinline__ float atomicMaxF32(float *address, float val) {
     int ret = __float_as_int(*address);
     while(val > __int_as_float(ret))
@@ -65,7 +48,7 @@ __device__ __forceinline__ float atomicMaxF32(float *address, float val) {
 }
 
 __global__
-void softmax_cuda(float *inp, float *out, const unsigned long n, const unsigned long m) {
+void softmax_cuda(const float *inp, float *out, const unsigned long n, const unsigned long m) {
     unsigned long row = blockIdx.y*blockDim.y + threadIdx.y;
     unsigned long p = (m+BLOCK_WIDTH_PER_DIM-1)/BLOCK_WIDTH_PER_DIM;
     extern __shared__ float inp_shared[];
@@ -101,7 +84,25 @@ void softmax_cuda(float *inp, float *out, const unsigned long n, const unsigned 
     }
 }
 
-void softmax_cuda_launcher(float *inp, float *out, const unsigned long n, const unsigned long m) {
+__global__
+void softmax_cuda_grad(const float *grad, const float *fwd, float *out, const unsigned long n, const unsigned long m) {
+    unsigned long row = blockIdx.y*blockDim.y + threadIdx.y;
+    unsigned long col = blockIdx.x*blockDim.x + threadIdx.x;
+
+    if (row < n && col < m) {
+        float s = 0.0f;
+        for (unsigned long j = 0; j < m; j++) {
+            for (unsigned long k = 0; k < m; k++) {
+                if (j == k) s += grad[row*m + k]*fwd[i*m + k]*(1.0 - fwd[i*m + k]);
+                else s += -grad[row*m + k]*fwd[i*m + k]*fwd[i*m + j];
+            }
+        }
+
+        out[row*m + col] = s;
+    }
+}
+
+void softmax_cuda_launcher(const float *inp, float *out, const unsigned long n, const unsigned long m) {
     dim3 bd(BLOCK_WIDTH_PER_DIM, BLOCK_WIDTH_PER_DIM, 1);
     dim3 gd(1, (n+BLOCK_WIDTH_PER_DIM-1)/BLOCK_WIDTH_PER_DIM, 1);
 
@@ -114,21 +115,15 @@ void softmax_cuda_launcher(float *inp, float *out, const unsigned long n, const 
     }
 }
 
-// int main(int argc, char *argv[]) {
-//     unsigned int n = 10000;
-//     unsigned int m = 1000;
+void softmax_cuda_grad_launcher(const float *grad, const float *fwd, float *out, const unsigned long n, const unsigned long m) {
+    dim3 bd(BLOCK_WIDTH_PER_DIM, BLOCK_WIDTH_PER_DIM, 1);
+    dim3 gd((m+BLOCK_WIDTH_PER_DIM-1)/BLOCK_WIDTH_PER_DIM, (n+BLOCK_WIDTH_PER_DIM-1)/BLOCK_WIDTH_PER_DIM, 1);
 
-//     float *x, *y;
+    softmax_cuda_grad<<<gd, bd>>>(grad, fwd, out, n, m);
+    cudaDeviceSynchronize();
 
-//     cudaMallocManaged(&x, n*m*sizeof(float));
-//     cudaMallocManaged(&y, n*m*sizeof(float));
-
-//     generate_data(x, n, m);
-
-//     auto start = std::chrono::high_resolution_clock::now();
-//     softmax_cuda_launcher(x, y, n, m);
-//     auto stop = std::chrono::high_resolution_clock::now();
-//     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
-
-//     std::cout << "Duration = " << duration.count() << " ms" << std::endl;
-// }
+    cudaError_t err = cudaGetLastError();
+    if (err != cudaSuccess) {
+        fprintf(stderr, "CUDA error: %s\n", cudaGetErrorString(err));
+    }
+}
