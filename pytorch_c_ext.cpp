@@ -101,17 +101,14 @@ namespace extension_cpp {
     }
 
     torch::Tensor softmax_cpu(const torch::Tensor &a) {
-        // Input validation
         TORCH_CHECK(a.device().is_cpu(), "Input tensor a must be a CPU tensor");
         TORCH_CHECK(a.is_contiguous(), "Input tensor a must be contiguous");
         TORCH_CHECK(a.dtype() == torch::kFloat32, "Input tensor a must be float32");
     
-        // Create the output tensor on the same device as input
         torch::Tensor c = torch::empty_like(a);
-        unsigned long n = a.size(0); // Total number of elements
+        unsigned long n = a.size(0);
         unsigned long m = a.size(1);
     
-        // Call the CUDA launcher function
         softmax(
             a.data_ptr<float>(),
             c.data_ptr<float>(),
@@ -124,7 +121,6 @@ namespace extension_cpp {
 
 
     torch::Tensor softmax_cpu_grad(const torch::Tensor &grad, const torch::Tensor &fwd_out) {
-        // Input validation
         TORCH_CHECK(fwd_out.device().is_cpu(), "Input tensor fwd_out must be a CPU tensor");
         TORCH_CHECK(grad.device().is_cpu(), "Input tensor grad must be a CPU tensor");
 
@@ -136,12 +132,10 @@ namespace extension_cpp {
 
         TORCH_CHECK(grad.size(0) == fwd_out.size(0) && grad.size(1) == fwd_out.size(1), "Mismatched shapes");
     
-        // Create the output tensor on the same device as input
         torch::Tensor c = torch::empty_like(grad);
-        unsigned long n = grad.size(0); // Total number of elements
+        unsigned long n = grad.size(0);
         unsigned long m = grad.size(1);
     
-        // Call the CUDA launcher function
         softmax_grad(
             grad.data_ptr<float>(),
             fwd_out.data_ptr<float>(),
@@ -154,17 +148,14 @@ namespace extension_cpp {
     }
 
     torch::Tensor softmax_gpu(const torch::Tensor &a) {
-        // Input validation
         TORCH_CHECK(a.device().is_cuda(), "Input tensor a must be a CUDA tensor");
         TORCH_CHECK(a.is_contiguous(), "Input tensor a must be contiguous");
         TORCH_CHECK(a.dtype() == torch::kFloat32, "Input tensor a must be float32");
     
-        // Create the output tensor on the same device as input
         torch::Tensor c = torch::empty_like(a);
-        unsigned long n = a.size(0); // Total number of elements
+        unsigned long n = a.size(0);
         unsigned long m = a.size(1);
     
-        // Call the CUDA launcher function
         softmax_cuda_launcher(
             a.data_ptr<float>(),
             c.data_ptr<float>(),
@@ -176,7 +167,6 @@ namespace extension_cpp {
     }
 
     torch::Tensor softmax_gpu_grad(const torch::Tensor &grad, const torch::Tensor &fwd_out) {
-        // Input validation
         TORCH_CHECK(fwd_out.device().is_cuda(), "Input tensor fwd_out must be a CUDA tensor");
         TORCH_CHECK(grad.device().is_cuda(), "Input tensor grad must be a CUDA tensor");
 
@@ -188,12 +178,10 @@ namespace extension_cpp {
 
         TORCH_CHECK(grad.size(0) == fwd_out.size(0) && grad.size(1) == fwd_out.size(1), "Mismatched shapes");
     
-        // Create the output tensor on the same device as input
         torch::Tensor c = torch::empty_like(grad);
-        unsigned long n = grad.size(0); // Total number of elements
+        unsigned long n = grad.size(0);
         unsigned long m = grad.size(1);
     
-        // Call the CUDA launcher function
         softmax_cuda_grad_launcher(
             grad.data_ptr<float>(),
             fwd_out.data_ptr<float>(),
