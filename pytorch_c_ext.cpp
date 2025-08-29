@@ -34,7 +34,7 @@
 #include <assert.h>
 #include <initializer_list>
 
-void softmax_cuda_launcher(float *inp, float *out, const unsigned long n, const unsigned long m);
+void softmax_cuda_launcher(const float *inp, float *out, const unsigned long n, const unsigned long m);
 void softmax_cuda_grad_launcher(const float *grad, const float *fwd, float *out, const unsigned long n, const unsigned long m);
 
 namespace extension_cpp {
@@ -85,23 +85,15 @@ namespace extension_cpp {
     void softmax_grad(const float *grad, const float *fwd, float *out, const unsigned long n, const unsigned long m) {
         tbb::parallel_for(
             tbb::blocked_range<size_t>(0, n), 
-            [&out, m](tbb::blocked_range<size_t> r) {
-            for (auto i = r.begin(); i < r.end(); i++) {
-                for (unsigned long j = 0; j < m; j++) {
-                    out[i*m + j] = 0.0;
-                }
-            }
-        });
-
-        tbb::parallel_for(
-            tbb::blocked_range<size_t>(0, n), 
             [&fwd, &out, &grad, m](tbb::blocked_range<size_t> r) {
                 for (auto i = r.begin(); i < r.end(); i++) {
                     for (unsigned int j = 0; j < m; j++) {
+                        float s = 0.0;
                         for (unsigned int k = 0; k < m; k++) {
-                            if (j == k) out[i*m + k] += grad[i*m + j]*fwd[i*m + j]*(1.0 - fwd[i*m + j]);
-                            else out[i*m + k] += -grad[i*m + j]*fwd[i*m + j]*fwd[i*m + k];
+                            if (j == k) s += grad[i*m + k]*fwd[i*m + j]*(1.0 - fwd[i*m + j]);
+                            else s += -grad[i*m + k]*fwd[i*m + k]*fwd[i*m + j];
                         }
+                        out[i*m + j] = s;
                     }
                 }
             }
@@ -185,8 +177,8 @@ namespace extension_cpp {
 
     torch::Tensor softmax_gpu_grad(const torch::Tensor &grad, const torch::Tensor &fwd_out) {
         // Input validation
-        TORCH_CHECK(fwd_out.device().is_cpu(), "Input tensor fwd_out must be a CPU tensor");
-        TORCH_CHECK(grad.device().is_cpu(), "Input tensor grad must be a CPU tensor");
+        TORCH_CHECK(fwd_out.device().is_cuda(), "Input tensor fwd_out must be a CUDA tensor");
+        TORCH_CHECK(grad.device().is_cuda(), "Input tensor grad must be a CUDA tensor");
 
         TORCH_CHECK(fwd_out.is_contiguous(), "Input tensor fwd_out must be contiguous");
         TORCH_CHECK(grad.is_contiguous(), "Input tensor grad must be contiguous");

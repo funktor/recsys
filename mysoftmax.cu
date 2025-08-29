@@ -92,10 +92,8 @@ void softmax_cuda_grad(const float *grad, const float *fwd, float *out, const un
     if (row < n && col < m) {
         float s = 0.0f;
         for (unsigned long j = 0; j < m; j++) {
-            for (unsigned long k = 0; k < m; k++) {
-                if (j == k) s += grad[row*m + k]*fwd[i*m + k]*(1.0 - fwd[i*m + k]);
-                else s += -grad[row*m + k]*fwd[i*m + k]*fwd[i*m + j];
-            }
+            if (j == col) s += grad[row*m + j]*fwd[row*m + col]*(1.0 - fwd[row*m + j]);
+            else s += -grad[row*m + j]*fwd[row*m + j]*fwd[row*m + col];
         }
 
         out[row*m + col] = s;
