@@ -842,3 +842,25 @@ if __name__ == '__main__':
     df_train, df_val, df_test = split_train_test(df)
     rec = train_and_validate_model(df_train, df_val, run_id=run_id)
     print("Loss on Test data = ",test_model(df_test, rec, run_id=run_id))
+
+# Two-Tower Embeddings Model Contrastive Loss Training
+# prepare dataset (user_id, movie_id, rating, timestamp, movie title, movie genres, movie year, movie tags)
+# user features - (user_id, prev_N_rated_movie_ids, prev_N_rated_movie_normalized_ratings)
+# movie features - (movie_id, movie_titles_tokens, movie_genres, movie_years, movie_tags)
+# encode sequential features - transformer encoders (enh - custom cuda flash attention, pos encoding rope etc.)
+# model training - adamw, cosine learning rate scheduler, accumulate grad batches
+# negative samples mining - movie features -> autoencoders/vae/vq-vae/rq-vae -> product quantization -> for each +ve movie, find most similar -ve movies
+# user embedding x movie embedding = 1/0 (contrastive loss training) (enh - custom cuda loss func)
+# pytorch distributed training (DDP) multi-gpu and multi-node
+# streaming from disk training (lightning, hf datasets, memory mapping, parquet, pyarrow) (enh - c++ memory mapping impl)
+# index movie embeddings (product quantization, LSH, HNSW, KD-Tree) (enh - c++/cuda prd quant, hnsw..)
+# user embedding - Approx Nearest Neighbor Search (Top K nearest movie embeddings) (enh - c++/cuda extension)
+# scoring real time.
+# 
+# Deep Generative Retreival Semantic ID
+# seq dataset : (user_id, prev_N_rated_movie_titles_tokens, prev_N_rated_movie_genres, prev_N_rated_movie_years, prev_N_rated_movie_tags, prev_N_rated_movie_ratings, next_rated_movie_titles_tokens, next_rated_movie_genres, next_rated_movie_year, next_rated_movie_tags) 
+# feature hashing - user_id, movie_id (murmurhash3, cuckoo hashing)
+# semantic id generation - movies - VQVAE / RQVAE network (enh - c++/cuda impl)
+# encoder-decoder transformer network
+# pytorch distributed training (DDP) multi-gpu and multi-node
+# index movie embeddings/semantic IDS
