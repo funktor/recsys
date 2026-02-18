@@ -845,7 +845,7 @@ if __name__ == '__main__':
 
 # Two-Tower Embeddings Model Contrastive Loss Training
 # prepare dataset (user_id, movie_id, rating, timestamp, movie title, movie genres, movie year, movie tags)
-# user features - (user_id, prev_N_rated_movie_ids, prev_N_rated_movie_normalized_ratings)
+# user features - (user_id, prev_N_rated_movie_ids, prev_N_rated_movie_normalized_ratings) (enh - C++ data processing extensions, mpi distributed data processing)
 # movie features - (movie_id, movie_titles_tokens, movie_genres, movie_years, movie_tags)
 # encode sequential features - transformer encoders (enh - custom cuda flash attention, pos encoding rope etc.)
 # model training - adamw, cosine learning rate scheduler, accumulate grad batches
