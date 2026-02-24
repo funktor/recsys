@@ -106,11 +106,10 @@ def pad_batch(values, dtype, max_seq_len=None):
     return arr
 
 
-def prepare_batches(ratings_dataset:Dataset, movies_dataset:pd.DataFrame, batch_size=128, device="gpu", batch_limit=None):
+def prepare_batches(ratings_dataset:Dataset, movies_dataset:pd.DataFrame, batch_size=128, device="gpu"):
     max_seq_len = 20
     n = ratings_dataset.shape[0]
 
-    k = 0
     for i in range(0, n, batch_size):
         df_ratings_batch_df:pd.DataFrame = ratings_dataset[i:min(n,i+batch_size)]
         df_ratings_batch_df = df_ratings_batch_df.reset_index()
@@ -141,9 +140,5 @@ def prepare_batches(ratings_dataset:Dataset, movies_dataset:pd.DataFrame, batch_
         labels = torch.from_numpy(df_ratings_batch_df["normalized_rating"].to_numpy(dtype=np.float32)).to(device=device)
 
         yield [user_ids, user_prev_rated_movie_ids, user_prev_ratings, movie_ids, movie_descriptions, movie_genres, movie_years], labels
-        
-        k += 1
-        if batch_limit is not None and k >= batch_limit:
-            break
 
 

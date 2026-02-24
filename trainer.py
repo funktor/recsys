@@ -150,7 +150,7 @@ def train_func(config: dict):
 
     for epoch in range(max_num_epochs):
         rec.train()
-        batch_iter = dataloader.prepare_batches(ratings_train, movies_dataset, batch_size, device=device, batch_limit=batches_per_epoch)
+        batch_iter = dataloader.prepare_batches(ratings_train, movies_dataset, batch_size, device=device)
         i = 0
         while True:
             batch = next(batch_iter)
@@ -184,6 +184,9 @@ def train_func(config: dict):
                 break
 
             i += 1
+
+            if i >= batches_per_epoch:
+                break
 
         rec.eval()
         batch_iter_val = dataloader.prepare_batches(ratings_val, movies_dataset, batch_size, device=device)
