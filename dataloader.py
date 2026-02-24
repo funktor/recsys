@@ -77,7 +77,7 @@ def get_datasets(path:str):
     world_size, rank = 1, 0
     
     train_files = pre_partitions_for_download(f"{path}/train", world_size, rank)
-    ratings_train = datasets.load_dataset("parquet", data_files=train_files, split="train")
+    ratings_train = datasets.load_dataset("parquet", data_files=train_files, split="train", cache_dir="/tmp/huggingface")
     
     n_train = ratings_train.shape[0]
     m_train = ratings_train.shape[1]
@@ -85,7 +85,10 @@ def get_datasets(path:str):
 
     ratings_train.set_format("numpy")
 
-    ratings_train_mmap = np.memmap(f"{path}/{rank}/ratings_train.mmap", dtype=np.object_, mode="w+", shape=ratings_train.shape)
+    mmap_dir = "mmap_folder"
+    os.makedirs(f"{mmap_dir}/{rank}", exist_ok=True)
+
+    ratings_train_mmap = np.memmap(f"{mmap_dir}/{rank}/ratings_train.mmap", dtype=np.object_, mode="w+", shape=ratings_train.shape)
     ratings_train_mmap[:,:] = ratings_train[:,:]
     ratings_train_mmap.flush()
 
@@ -98,7 +101,7 @@ def get_datasets(path:str):
 
     ratings_val.set_format("numpy")
 
-    ratings_val_mmap = np.memmap(f"{path}/{rank}/ratings_val.mmap", dtype=np.object_, mode="w+", shape=ratings_val.shape)
+    ratings_val_mmap = np.memmap(f"{mmap_dir}/{rank}/ratings_val.mmap", dtype=np.object_, mode="w+", shape=ratings_val.shape)
     ratings_val_mmap[:,:] = ratings_val[:,:]
     ratings_val_mmap.flush()
 
