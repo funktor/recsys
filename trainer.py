@@ -214,6 +214,7 @@ def train_func(config: dict):
                 
                     loss:torch.Tensor = criterion(output.contiguous(), labels.contiguous())
                     sum_loss += output.shape[0]*loss.item()
+                    print(f"Epoch: {epoch+1}, Batch: {i+1}, Loss: {sum_loss/(batch_size*(i+1))}")
             else:
                 break
 
