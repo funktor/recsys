@@ -40,7 +40,7 @@ def pre_partitions_with_files(filepaths:List[str], world_size, rank):
     train_files = []
     for i in range(len(filepaths)):
         if i % world_size == rank:
-            train_files += [filepaths[i]]
+            train_files += [f"gs://{filepaths[i]}"]
 
     print(f"Files assigned to GPU with {rank}: {train_files[:min(10, len(train_files))]}...")
 
