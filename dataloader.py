@@ -80,12 +80,12 @@ def get_datasets(path:str):
     train_files = pre_partitions_for_download(f"{path}/train", world_size, rank)
     ratings_train = datasets.load_dataset("parquet", data_files=train_files, split="train", cache_dir="/tmp/huggingface")
     cols_train = ratings_train.column_names
-    ratings_train.set_format("numpy")
+    ratings_train.set_format("pandas")
 
     val_files = pre_partitions_for_download(f"{path}/validation", world_size, rank)
     ratings_val = datasets.load_dataset("parquet", data_files=val_files, split="train")
     cols_val = ratings_val.column_names
-    ratings_val.set_format("numpy")
+    ratings_val.set_format("pandas")
 
     movies_dataset = datasets.load_dataset("parquet", data_files=f"{path}/movies.parquet", split="train", keep_in_memory=True)
     movies_dataset.set_format("pandas")
