@@ -207,6 +207,9 @@ def upload_directory_with_transfer_manager(bucket_name:str, source_path:str, des
 
         print("Found {} files.".format(len(string_paths)))
 
+        if destination_path.endswith("/") is False:
+            destination_path += "/"
+
         results = transfer_manager.upload_many_from_filenames(
             bucket, 
             string_paths, 
@@ -275,7 +278,7 @@ def run_dp_pipeline(dataset_path):
     delete_gcp_folder("r6-ae-dev-adperf-adintelligence-data", "amondal/parquet_dataset_ml_32m")
 
     print("Uploading to cloud...")
-    upload_directory_with_transfer_manager("r6-ae-dev-adperf-adintelligence-data", "parquet_dataset_ml_32m", "amondal/parquet_dataset_ml_32m")
+    upload_directory_with_transfer_manager("r6-ae-dev-adperf-adintelligence-data", "parquet_dataset_ml_32m", "amondal/parquet_dataset_ml_32m/")
 
 if __name__ == '__main__':
     dataset_path = "datasets/ml-32m"
