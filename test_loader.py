@@ -19,7 +19,6 @@ def count_rows_in_gcs_parquet(parquet_path:str):
     parquet_paths = parquet_path.split("/")
     parquet_paths = parquet_paths[2:-1]
     parquet_dir = "/".join(parquet_paths)
-    print(parquet_dir)
 
     dataset = pq.ParquetDataset(parquet_dir, filesystem=fs)
     
