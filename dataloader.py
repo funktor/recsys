@@ -13,10 +13,10 @@ import fsspec
 from google.cloud import storage
 import joblib
 
-try:
-    from ray.train import get_context as ray_get_ctx
-except Exception:
-    ray_get_ctx = None
+# try:
+#     from ray.train import get_context as ray_get_ctx
+# except Exception:
+#     ray_get_ctx = None
 
 
 def get_world_info():
@@ -50,6 +50,8 @@ def pre_partitions_with_files(filepaths:List[str], world_size, rank):
 def pre_partitions_for_download(path:str, world_size, rank):
     fs = fsspec.filesystem("gcs")
     partitions = fs.glob(f"{path}/*.parquet")
+    partitions = sorted(partitions)
+
     if not partitions:
         raise ValueError(f"No partitions found matching pattern: {path}")
 
@@ -69,8 +71,10 @@ def get_vocabulary(gs_path:str, local_path:str):
 
 
 def get_datasets(path:str):
-    world_size, rank = get_world_info()
-    print(f"WORLD_SIZE={world_size} RANK={rank}")
+    # world_size, rank = get_world_info()
+    # print(f"WORLD_SIZE={world_size} RANK={rank}")
+
+    world_size, rank = 1, 0
     
     train_files = pre_partitions_for_download(f"{path}/train", world_size, rank)
     ratings_train = datasets.load_dataset("parquet", data_files=train_files, split="train")
