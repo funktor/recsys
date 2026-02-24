@@ -88,6 +88,7 @@ def get_datasets(path:str):
     mmap_dir = "mmap_folder"
     os.makedirs(f"{mmap_dir}/{rank}", exist_ok=True)
 
+    print("Creating ratings_train_mmap...")
     ratings_train_mmap = np.memmap(f"{mmap_dir}/{rank}/ratings_train.mmap", dtype=np.object_, mode="w+", shape=ratings_train.shape)
     ratings_train_mmap[:,:] = ratings_train
     ratings_train_mmap.flush()
@@ -101,6 +102,7 @@ def get_datasets(path:str):
 
     ratings_val.set_format("numpy")
 
+    print("Creating ratings_val_mmap...")
     ratings_val_mmap = np.memmap(f"{mmap_dir}/{rank}/ratings_val.mmap", dtype=np.object_, mode="w+", shape=ratings_val.shape)
     ratings_val_mmap[:,:] = ratings_val
     ratings_val_mmap.flush()
