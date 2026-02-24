@@ -12,6 +12,7 @@ from torch.utils.data.distributed import DistributedSampler
 import fsspec
 from google.cloud import storage
 import joblib
+from datasets import Dataset
 
 # try:
 #     from ray.train import get_context as ray_get_ctx
@@ -78,39 +79,18 @@ def get_datasets(path:str):
     
     train_files = pre_partitions_for_download(f"{path}/train", world_size, rank)
     ratings_train = datasets.load_dataset("parquet", data_files=train_files, split="train", cache_dir="/tmp/huggingface")
-    
-    n_train = ratings_train.shape[0]
-    m_train = ratings_train.shape[1]
     cols_train = ratings_train.column_names
-
     ratings_train.set_format("numpy")
-
-    mmap_dir = "mmap_folder"
-    os.makedirs(f"{mmap_dir}/{rank}", exist_ok=True)
-
-    print("Creating ratings_train_mmap...")
-    ratings_train_mmap = np.memmap(f"{mmap_dir}/{rank}/ratings_train.mmap", dtype=np.object_, mode="w+", shape=ratings_train.shape)
-    ratings_train_mmap[:,:] = ratings_train
-    ratings_train_mmap.flush()
 
     val_files = pre_partitions_for_download(f"{path}/validation", world_size, rank)
     ratings_val = datasets.load_dataset("parquet", data_files=val_files, split="train")
-
-    n_val = ratings_val.shape[0]
-    m_val = ratings_val.shape[1]
     cols_val = ratings_val.column_names
-
     ratings_val.set_format("numpy")
-
-    print("Creating ratings_val_mmap...")
-    ratings_val_mmap = np.memmap(f"{mmap_dir}/{rank}/ratings_val.mmap", dtype=np.object_, mode="w+", shape=ratings_val.shape)
-    ratings_val_mmap[:,:] = ratings_val
-    ratings_val_mmap.flush()
 
     movies_dataset = datasets.load_dataset("parquet", data_files=f"{path}/movies.parquet", split="train", keep_in_memory=True)
     movies_dataset.set_format("pandas")
 
-    return ratings_train_mmap, ratings_val_mmap, movies_dataset, n_train, m_train, cols_train, n_val, m_val, cols_val
+    return ratings_train, ratings_val, movies_dataset, cols_train, cols_val
 
 
 def pad_batch(values, dtype, max_seq_len=None):
@@ -128,13 +108,13 @@ def pad_batch(values, dtype, max_seq_len=None):
     return arr
 
 
-def prepare_batches(memmap_path, movies_dataset, n, m, columns, batch_size=128, device="gpu", batch_limit=None):
+def prepare_batches(ratings_dataset:Dataset, movies_dataset:Dataset, columns, batch_size=128, device="gpu", batch_limit=None):
     max_seq_len = 20
-    dataset_mmap = np.memmap(memmap_path, dtype=np.object_, mode="r", shape=(n,m))
+    n = ratings_dataset.shape[0]
 
     k = 0
     for i in range(0, n, batch_size):
-        df_ratings_batch = dataset_mmap[i:min(n,i+batch_size)]
+        df_ratings_batch = ratings_dataset[i:min(n,i+batch_size)]
 
         df_ratings_batch_df = pd.DataFrame(df_ratings_batch, columns=columns)
         df_ratings_batch_df = df_ratings_batch_df.merge(movies_dataset, on=["movieId"], how="left")
