@@ -46,7 +46,7 @@ void get_historical_features(
                     const u_int64_t *timestamps, 
                     const float_t *normalized_ratings, 
                     u_int32_t **&prev_movie_ids, 
-                    float_t *&prev_ratings, 
+                    float_t **&prev_ratings, 
                     u_int32_t *&num_tokens_prev,
                     const u_int32_t num_rows,
                     const u_int32_t max_hist
