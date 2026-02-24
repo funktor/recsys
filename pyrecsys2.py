@@ -198,7 +198,7 @@ def upload_directory_with_transfer_manager(bucket_name:str, source_path:str, des
         bucket = storage_client.bucket(bucket_name)
 
         directory_as_path_obj = Path(source_path)
-        paths = directory_as_path_obj.rglob("*.parquet")
+        paths = directory_as_path_obj.rglob("*")
 
         file_paths = [path for path in paths if path.is_file()]
         relative_paths = [path.relative_to(source_path) for path in file_paths]
