@@ -1,12 +1,6 @@
 import argparse
 import os
 import torch
-from lightning.pytorch.callbacks import EarlyStopping, ModelCheckpoint
-from lightning.pytorch.loggers import MLFlowLogger
-from lightning.pytorch.strategies import DDPStrategy
-from mlflow.tracking import MlflowClient
-from torch.utils.data import DataLoader, IterableDataset
-
 import ray
 from ray.train import ScalingConfig, RunConfig, Checkpoint
 from ray.train.torch import TorchTrainer
@@ -25,15 +19,11 @@ import pandas as pd
 import random
 import uuid
 import joblib
-import pytorch_lightning as pl
 
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 import torch.utils.data as data
-
-# Setting the seed
-pl.seed_everything(42)
 
 # Ensure that all operations are deterministic on GPU (if used) for reproducibility
 torch.backends.cudnn.deterministic = True

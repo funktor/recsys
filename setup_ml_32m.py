@@ -9,16 +9,14 @@ extensions = [
         "ml_32m_py",
         sources=["ml_32m_dp_py.pyx", "ml_32m_dp.cpp"],
         language="c++",
-        extra_compile_args=["-std=c++17", "-O3", "-ltbb"],
-        extra_link_args=["-ltbb"],
+        extra_compile_args=["-std=c++17", "-O3"],
         include_dirs=[
             "/opt/homebrew/opt/python@3.13/Frameworks/Python.framework/Versions/3.13/include/python3.13", 
             "/Users/amondal/recsys/.venv/lib/python3.13/site-packages/torch/include/torch/csrc/api/include",
             "/Users/amondal/recsys/.venv/lib/python3.13/site-packages/torch/include",
             "/opt/homebrew/opt/tbb/include",
             numpy.get_include()
-        ],
-        library_dirs=["/opt/homebrew/opt/tbb/lib"]
+        ]
     )
 ]
 

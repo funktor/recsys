@@ -7,6 +7,10 @@ import ml_32m_py
 import numpy as np
 import random
 import shutil
+import pyarrow
+from pathlib import Path
+from google.cloud import storage
+from google.cloud.storage import Client, transfer_manager
 
 def remove_stop(x):
     stopwords = ["i", "me", "my", "myself", "we", "our", "ours", "ourselves", "you", "your", "yours", "yourself", "yourselves", "he", "him", "his", "himself", "she", "her", "hers", "herself", "it", "its", "itself", "they", "them", "their", "theirs", "themselves", "what", "which", "who", "whom", "this", "that", "these", "those", "am", "is", "are", "was", "were", "be", "been", "being", "have", "has", "had", "having", "do", "does", "did", "doing", "a", "an", "the", "and", "but", "if", "or", "because", "as", "until", "while", "of", "at", "by", "for", "with", "about", "against", "between", "into", "through", "during", "before", "after", "above", "below", "to", "from", "up", "down", "in", "out", "on", "off", "over", "under", "again", "further", "then", "once", "here", "there", "when", "where", "why", "how", "all", "any", "both", "each", "few", "more", "most", "other", "some", "such", "no", "nor", "not", "only", "own", "same", "so", "than", "too", "very", "s", "t", "can", "will", "just", "don", "should", "now"]
@@ -188,6 +192,56 @@ def save_dfs_parquet(out_dir:str, vocabulary:dict, df_ratings_train:pd.DataFrame
     df_movies.to_parquet(out_dir + "/movies.parquet")
 
 
+def upload_directory_with_transfer_manager(bucket_name, source_directory, workers=8):
+    try:
+        storage_client = Client()
+        bucket = storage_client.bucket(bucket_name)
+
+        directory_as_path_obj = Path(source_directory)
+        paths = directory_as_path_obj.rglob("*.parquet")
+
+        file_paths = [path for path in paths if path.is_file()]
+        relative_paths = [path.relative_to(source_directory) for path in file_paths]
+
+        string_paths = [str(path) for path in relative_paths]
+
+        print("Found {} files.".format(len(string_paths)))
+
+        results = transfer_manager.upload_many_from_filenames(
+            bucket, 
+            string_paths, 
+            source_directory=source_directory, 
+            max_workers=workers
+        )
+
+        for name, result in zip(string_paths, results):
+            if isinstance(result, Exception):
+                print("Failed to upload {} due to exception: {}".format(name, result))
+            else:
+                print("Uploaded {} to {}.".format(name, bucket.name))
+    
+    except Exception as e:
+        print(e)
+
+
+def delete_gcp_folder(bucket_name:str, folder_path:str):
+    try:
+        storage_client = storage.Client()
+        bucket = storage_client.bucket(bucket_name)
+        
+        prefix = folder_path if folder_path.endswith('/') else f"{folder_path}/"
+        blobs = list(bucket.list_blobs(prefix=prefix))
+        
+        if blobs:
+            bucket.delete_blobs(blobs)
+            print(f"Deleted {len(blobs)} objects from {folder_path}")
+        else:
+            print("No objects found to delete.")
+
+    except Exception as e:
+        print(e)
+
+
 def run_dp_pipeline(dataset_path):
     print("Reading datasets from path...")
     df_ratings, df_movies = get_ml_32m_dataframe(dataset_path)
@@ -215,6 +269,12 @@ def run_dp_pipeline(dataset_path):
 
     print("Saving parquet files...")
     save_dfs_parquet("parquet_dataset_ml_32m", vocabulary, df_ratings_train, df_ratings_val, df_ratings_test, df_movies, num_partitions=32)
+
+    print("Deleting existing folder in cloud...")
+    delete_gcp_folder("r6-ae-dev-adperf-adintelligence-data", "parquet_dataset_ml_32m")
+
+    print("Uploading to cloud...")
+    upload_directory_with_transfer_manager("r6-ae-dev-adperf-adintelligence-data", "parquet_dataset_ml_32m")
 
 if __name__ == '__main__':
     dataset_path = "datasets/ml-32m"
