@@ -848,10 +848,10 @@ if __name__ == '__main__':
 # user features - (user_id, prev_N_rated_movie_ids, prev_N_rated_movie_normalized_ratings) (enh - C++ data processing extensions, mpi distributed data processing)
 # movie features - (movie_id, movie_titles_tokens, movie_genres, movie_years, movie_tags)
 # encode sequential features - transformer encoders (enh - custom cuda flash attention, pos encoding rope etc.)
-# model training - adamw, cosine learning rate scheduler, accumulate grad batches
+# model training - adamw, cosine learning rate scheduler, accumulate grad batches, automatic mixed precision training
 # negative samples mining - movie features -> autoencoders/vae/vq-vae/rq-vae -> product quantization -> for each +ve movie, find most similar -ve movies
 # user embedding x movie embedding = 1/0 (contrastive loss training) (enh - custom cuda loss func)
-# pytorch distributed training (DDP) multi-gpu and multi-node
+# pytorch distributed training (DDP) multi-gpu and multi-node, (enh - C++-MPI training)
 # streaming from disk training (lightning, hf datasets, memory mapping, parquet, pyarrow) (enh - c++ memory mapping impl)
 # index movie embeddings (product quantization, LSH, HNSW, KD-Tree) (enh - c++/cuda prd quant, hnsw..)
 # user embedding - Approx Nearest Neighbor Search (Top K nearest movie embeddings) (enh - c++/cuda extension)
