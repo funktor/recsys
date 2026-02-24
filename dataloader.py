@@ -86,7 +86,7 @@ def get_datasets(path:str):
     ratings_val.set_format("pandas")
 
     movies_dataset = datasets.load_dataset("parquet", data_files=f"{path}/movies.parquet", split="train", keep_in_memory=True)
-    movies_dataset.set_format("pandas")
+    movies_dataset = movies_dataset.to_pandas()
 
     return ratings_train, ratings_val, movies_dataset
 
@@ -106,13 +106,13 @@ def pad_batch(values, dtype, max_seq_len=None):
     return arr
 
 
-def prepare_batches(ratings_dataset:Dataset, movies_dataset:Dataset, batch_size=128, device="gpu", batch_limit=None):
+def prepare_batches(ratings_dataset:Dataset, movies_dataset:pd.DataFrame, batch_size=128, device="gpu", batch_limit=None):
     max_seq_len = 20
     n = ratings_dataset.shape[0]
 
     k = 0
     for i in range(0, n, batch_size):
-        df_ratings_batch_df:pd.DataFrame = ratings_dataset[i:min(n,i+batch_size)]
+        df_ratings_batch_df:pd.DataFrame = ratings_dataset[i:min(n,i+batch_size)].to_pandas()
         df_ratings_batch_df = df_ratings_batch_df.reset_index()
         df_ratings_batch_df = df_ratings_batch_df.merge(movies_dataset, on=["movieId"], how="left")
 
