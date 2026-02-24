@@ -89,7 +89,7 @@ def get_datasets(path:str):
     os.makedirs(f"{mmap_dir}/{rank}", exist_ok=True)
 
     ratings_train_mmap = np.memmap(f"{mmap_dir}/{rank}/ratings_train.mmap", dtype=np.object_, mode="w+", shape=ratings_train.shape)
-    ratings_train_mmap[:,:] = ratings_train[:,:]
+    ratings_train_mmap[:,:] = ratings_train
     ratings_train_mmap.flush()
 
     val_files = pre_partitions_for_download(f"{path}/validation", world_size, rank)
@@ -102,7 +102,7 @@ def get_datasets(path:str):
     ratings_val.set_format("numpy")
 
     ratings_val_mmap = np.memmap(f"{mmap_dir}/{rank}/ratings_val.mmap", dtype=np.object_, mode="w+", shape=ratings_val.shape)
-    ratings_val_mmap[:,:] = ratings_val[:,:]
+    ratings_val_mmap[:,:] = ratings_val
     ratings_val_mmap.flush()
 
     movies_dataset = datasets.load_dataset("parquet", data_files=f"{path}/movies.parquet", split="train", keep_in_memory=True)
