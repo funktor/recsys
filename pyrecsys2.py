@@ -243,32 +243,32 @@ def delete_gcp_folder(bucket_name:str, folder_path:str):
 
 
 def run_dp_pipeline(dataset_path):
-    print("Reading datasets from path...")
-    df_ratings, df_movies = get_ml_32m_dataframe(dataset_path)
+    # print("Reading datasets from path...")
+    # df_ratings, df_movies = get_ml_32m_dataframe(dataset_path)
 
-    print("Normalizing ratings...")
-    df_ratings = normalize_ratings(df_ratings)
+    # print("Normalizing ratings...")
+    # df_ratings = normalize_ratings(df_ratings)
 
-    print("Splitting into train test and validation...")
-    df_ratings_train, df_ratings_val, df_ratings_test = split_train_test(df_ratings, min_rated=10)
+    # print("Splitting into train test and validation...")
+    # df_ratings_train, df_ratings_val, df_ratings_test = split_train_test(df_ratings, min_rated=10)
 
-    print("Fitting vocabulary...")
-    vocabulary, df_ratings_train, df_movies = fit_vocabulary(df_ratings_train, df_movies)
+    # print("Fitting vocabulary...")
+    # vocabulary, df_ratings_train, df_movies = fit_vocabulary(df_ratings_train, df_movies)
 
-    print("Vocabulary on validation...")
-    df_ratings_val = score_vocabulary(df_ratings_val, vocabulary)
-    print("Vocabulary on test...")
-    df_ratings_test = score_vocabulary(df_ratings_test, vocabulary)
+    # print("Vocabulary on validation...")
+    # df_ratings_val = score_vocabulary(df_ratings_val, vocabulary)
+    # print("Vocabulary on test...")
+    # df_ratings_test = score_vocabulary(df_ratings_test, vocabulary)
 
-    print("Prepare historical features train...")
-    get_historical_user_features_cpp(df_ratings_train)
-    print("Prepare historical features val...")
-    get_historical_user_features_cpp(df_ratings_val)
-    print("Prepare historical features test...")
-    get_historical_user_features_cpp(df_ratings_test)
+    # print("Prepare historical features train...")
+    # get_historical_user_features_cpp(df_ratings_train)
+    # print("Prepare historical features val...")
+    # get_historical_user_features_cpp(df_ratings_val)
+    # print("Prepare historical features test...")
+    # get_historical_user_features_cpp(df_ratings_test)
 
-    print("Saving parquet files...")
-    save_dfs_parquet("parquet_dataset_ml_32m", vocabulary, df_ratings_train, df_ratings_val, df_ratings_test, df_movies, num_partitions=32)
+    # print("Saving parquet files...")
+    # save_dfs_parquet("parquet_dataset_ml_32m", vocabulary, df_ratings_train, df_ratings_val, df_ratings_test, df_movies, num_partitions=32)
 
     print("Deleting existing folder in cloud...")
     delete_gcp_folder("r6-ae-dev-adperf-adintelligence-data", "parquet_dataset_ml_32m")
