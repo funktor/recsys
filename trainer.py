@@ -137,7 +137,7 @@ def train_func(config: dict):
     ratings_train, ratings_val, movies_dataset = dataloader.get_datasets(datasets_gcs_path)
 
     num_train_data = count_rows_in_gcs_parquet(ratings_train_path)
-    batches_per_epoch = num_train_data // (world_size*batch_size)
+    batches_per_epoch = 100 #num_train_data // (world_size*batch_size)
 
     os.makedirs(f"/tmp/{rank}", exist_ok=True)
     vocabulary = dataloader.get_vocabulary(path_vocab, f"/tmp/{rank}/vocabulary.pkl")
