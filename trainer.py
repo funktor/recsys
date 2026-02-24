@@ -139,6 +139,7 @@ def train_func(config: dict):
     num_train_data = count_rows_in_gcs_parquet(ratings_train_path)
     batches_per_epoch = num_train_data // (world_size*batch_size)
 
+    os.makedirs(f"/tmp/{rank}", exist_ok=True)
     vocabulary = dataloader.get_vocabulary(path_vocab, f"/tmp/{rank}/vocabulary.pkl")
 
     rec, optimizer = get_trainer_and_optimizer(vocabulary, device)
