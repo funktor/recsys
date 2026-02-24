@@ -192,16 +192,16 @@ def save_dfs_parquet(out_dir:str, vocabulary:dict, df_ratings_train:pd.DataFrame
     df_movies.to_parquet(out_dir + "/movies.parquet")
 
 
-def upload_directory_with_transfer_manager(bucket_name, source_directory, workers=8):
+def upload_directory_with_transfer_manager(bucket_name:str, source_path:str, destination_path:str, workers=8):
     try:
         storage_client = Client()
         bucket = storage_client.bucket(bucket_name)
 
-        directory_as_path_obj = Path(source_directory)
+        directory_as_path_obj = Path(source_path)
         paths = directory_as_path_obj.rglob("*.parquet")
 
         file_paths = [path for path in paths if path.is_file()]
-        relative_paths = [path.relative_to(source_directory) for path in file_paths]
+        relative_paths = [path.relative_to(source_path) for path in file_paths]
 
         string_paths = [str(path) for path in relative_paths]
 
@@ -210,7 +210,8 @@ def upload_directory_with_transfer_manager(bucket_name, source_directory, worker
         results = transfer_manager.upload_many_from_filenames(
             bucket, 
             string_paths, 
-            source_directory=source_directory, 
+            blob_name_prefix=destination_path,
+            source_directory=source_path, 
             max_workers=workers
         )
 
@@ -271,10 +272,10 @@ def run_dp_pipeline(dataset_path):
     # save_dfs_parquet("parquet_dataset_ml_32m", vocabulary, df_ratings_train, df_ratings_val, df_ratings_test, df_movies, num_partitions=32)
 
     print("Deleting existing folder in cloud...")
-    delete_gcp_folder("r6-ae-dev-adperf-adintelligence-data", "parquet_dataset_ml_32m")
+    delete_gcp_folder("r6-ae-dev-adperf-adintelligence-data", "amondal/parquet_dataset_ml_32m")
 
     print("Uploading to cloud...")
-    upload_directory_with_transfer_manager("r6-ae-dev-adperf-adintelligence-data", "parquet_dataset_ml_32m")
+    upload_directory_with_transfer_manager("r6-ae-dev-adperf-adintelligence-data", "parquet_dataset_ml_32m", "amondal/parquet_dataset_ml_32m")
 
 if __name__ == '__main__':
     dataset_path = "datasets/ml-32m"
