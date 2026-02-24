@@ -49,7 +49,7 @@ def pre_partitions_with_files(filepaths:List[str], world_size, rank):
 
 def pre_partitions_for_download(path:str, world_size, rank):
     fs = fsspec.filesystem("gcs")
-    partitions = fs.glob(f"{path}/*.parquet")
+    partitions = fs.glob(f"{path}/**/*.parquet")
     partitions = sorted(partitions)
 
     if not partitions:
