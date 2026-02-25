@@ -160,7 +160,7 @@ def train_func(config: dict):
 
     print("Getting model and optimizer...")
     rec, optimizer = get_trainer_and_optimizer(vocabulary, rank_global)
-    rec = DDP(rec, device_ids=[rank_global])
+    rec = DDP(rec, device_ids=[rank_global], find_unused_parameters=True)
 
     optimizer.zero_grad()
 
