@@ -130,15 +130,13 @@ class CosineWarmupScheduler(optim.lr_scheduler._LRScheduler):
     
     
 def train_func(config: dict):
-    world_size, rank_local, rank_global = 1, 0, 0
-
     print("Setting up DDP...")
     if dist.is_initialized() is False:
         ddp_setup()
 
-        rank_local  = os.environ["LOCAL_RANK"]
-        rank_global = os.environ["RANK"]
-        world_size  = os.environ["WORLD_SIZE"]
+    rank_local  = os.environ["LOCAL_RANK"]
+    rank_global = os.environ["RANK"]
+    world_size  = os.environ["WORLD_SIZE"]
 
     datasets_gcs_path = config["gcs_dir"]
     ratings_train_path = f"{datasets_gcs_path}/train/*.parquet"
