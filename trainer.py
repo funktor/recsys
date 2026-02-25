@@ -24,6 +24,7 @@ from torch.distributed import init_process_group
 from pathlib import Path
 from torch.nn.parallel import DistributedDataParallel as DDP
 from model import RecommenderSystem
+from datasets import Dataset
 
 # Ensure that all operations are deterministic on GPU (if used) for reproducibility
 torch.backends.cudnn.deterministic = True
@@ -293,10 +294,37 @@ def train_func(config: dict):
         checkpoint(rec.module, optimizer, os.path.join(model_out_dir, f"final_model.pth"))
 
 
-# def save_movie_embeddings(model:DDP, path:str):
-#     mmap = np.memmap(path, dtype=np.float32, mode="w+", shape=)
-#     model:RecommenderSystem = model.module
-#     model.get_movie_embeddings()
+def save_embeddings(model:DDP, ratings_train:Dataset, movies_dataset:Dataset, path:str, batch_size:int=1024):
+    print("Getting datasets...")
+    movie_emb_mmap = np.memmap(path, dtype=np.float32, mode="w+", shape=ratings_train.shape)
+    movie_emb_mmap = np.memmap(path, dtype=np.float32, mode="w+", shape=ratings_train.shape)
+
+    movie_emb_map = {}
+    users_emb_map = {}
+
+    batch_iter = dataloader.prepare_batches(ratings_train, movies_dataset, batch_size, device=0)
+    model:RecommenderSystem = model.module
+    
+    i = 0
+    while True:
+        try:
+            batch = next(batch_iter)
+            data, labels = batch
+            user_ids, user_prev_rated_movie_ids, user_prev_ratings, movie_ids, movie_descriptions, movie_genres, movie_years = data
+            
+
+            with torch.no_grad():
+                output:torch.Tensor = \
+                    model.get_movie_embeddings(
+                        movie_ids, 
+                        movie_descriptions, 
+                        movie_genres, 
+                        movie_years
+                    )
+        except StopIteration:
+            break
+                    
+    model.get_movie_embeddings()
 
 
 if __name__ == "__main__":
