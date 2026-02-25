@@ -38,7 +38,7 @@ else:
 
 def ddp_setup():
     init_process_group(backend="nccl")
-    torch.cuda.set_device(os.environ["LOCAL_RANK"])
+    torch.cuda.set_device(os.environ["RANK"])
 
 def checkpoint(model:nn.Module, optimizer:torch.optim.Optimizer, filename):
     torch.save({'optimizer':optimizer.state_dict(), 'model':model.state_dict()}, filename)
@@ -176,10 +176,10 @@ def train_func(config: dict):
     scheduler = CosineWarmupScheduler(optimizer, warmup=50, max_iters=batches_per_epoch*max_num_epochs/accumulate_grad_batches)
 
     for epoch in range(max_num_epochs):
-        print(f"Starting epoch {i+1}...")
+        print(f"Starting epoch {epoch+1}...")
         rec.train()
 
-        batch_iter = dataloader.prepare_batches(ratings_train, movies_dataset, batch_size, device=device)
+        batch_iter = dataloader.prepare_batches(ratings_train, movies_dataset, batch_size, device=rank_global)
         i = 0
         while True:
             batch = next(batch_iter)
@@ -222,9 +222,9 @@ def train_func(config: dict):
             if i >= batches_per_epoch:
                 break
 
-        print(f"Running validation for epoch {i+1}...")
+        print(f"Running validation for epoch {epoch+1}...")
         rec.eval()
-        batch_iter_val = dataloader.prepare_batches(ratings_val, movies_dataset, batch_size, device=device)
+        batch_iter_val = dataloader.prepare_batches(ratings_val, movies_dataset, batch_size, device=rank_global)
         sum_loss = 0.0
         sum_rows = 0
 
@@ -266,7 +266,7 @@ def train_func(config: dict):
 
         if rank_global == 0:
             avg_vloss = vloss.item()/world_size
-            print(f"Epoch: {epoch+1}, Batch: {i+1}, Average Validation Loss: {avg_vloss}")
+            print(f"Average Validation Loss: {avg_vloss}")
             print()
 
 
