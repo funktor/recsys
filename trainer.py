@@ -30,7 +30,7 @@ torch.backends.cudnn.benchmark = False
 
 def ddp_setup():
     init_process_group(backend="nccl")
-    torch.cuda.set_device(os.environ["RANK"])
+    torch.cuda.set_device(int(os.environ["RANK"]))
 
 def checkpoint(model:nn.Module, optimizer:torch.optim.Optimizer, filename):
     torch.save({'optimizer':optimizer.state_dict(), 'model':model.state_dict()}, filename)
@@ -126,9 +126,9 @@ def train_func(config: dict):
     if dist.is_initialized() is False:
         ddp_setup()
 
-    rank_local  = os.environ["LOCAL_RANK"]
-    rank_global = os.environ["RANK"]
-    world_size  = os.environ["WORLD_SIZE"]
+    rank_local  = int(os.environ["LOCAL_RANK"])
+    rank_global = int(os.environ["RANK"])
+    world_size  = int(os.environ["WORLD_SIZE"])
 
     datasets_gcs_path = config["gcs_dir"]
     ratings_train_path = f"{datasets_gcs_path}/train/*.parquet"
