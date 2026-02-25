@@ -30,7 +30,7 @@ torch.backends.cudnn.benchmark = False
 
 def ddp_setup():
     init_process_group(backend="nccl")
-    torch.cuda.set_device(int(os.environ["RANK"]))
+    torch.cuda.set_device(f"cuda:{int(os.environ["RANK"])}")
 
 def checkpoint(model:nn.Module, optimizer:torch.optim.Optimizer, filename):
     torch.save({'optimizer':optimizer.state_dict(), 'model':model.state_dict()}, filename)
@@ -98,7 +98,7 @@ def get_trainer_and_optimizer(vocabulary:dict, rank:int):
             movie_embedding_size, 
             movie_dropout,
             embedding_size
-        ).to(rank)
+        ).to(f"cuda:{rank}")
     
     optimizer = optim.Adam(rec.parameters(), lr=0.0001)
     return rec, optimizer
@@ -175,7 +175,7 @@ def train_func(config: dict):
         print(f"Starting epoch {epoch+1}...")
         rec.train()
 
-        batch_iter = dataloader.prepare_batches(ratings_train, movies_dataset, batch_size, device=rank_global)
+        batch_iter = dataloader.prepare_batches(ratings_train, movies_dataset, batch_size, device=f"cuda:{rank_global}")
         i = 0
         while True:
             batch = next(batch_iter)
@@ -200,12 +200,11 @@ def train_func(config: dict):
                 batch_loss.backward()
 
                 if (i+1) % accumulate_grad_batches == 0:
-                    if (i+1) % 1024:
-                        dist.reduce(batch_loss, dst=0, op=dist.ReduceOp.SUM)
+                    dist.reduce(batch_loss, dst=0, op=dist.ReduceOp.SUM)
 
-                        if rank_global == 0:
-                            avg_loss = batch_loss.item()/world_size
-                            print(f"Epoch: {epoch+1}, Batch: {i+1}, Average Loss: {avg_loss}")
+                    if rank_global == 0:
+                        avg_loss = batch_loss.item()/world_size
+                        print(f"Epoch: {epoch+1}, Batch: {i+1}, Average Loss: {avg_loss}")
 
                     nn.utils.clip_grad_norm_(rec.parameters(), max_norm=1.0)
                     optimizer.step()
@@ -221,7 +220,7 @@ def train_func(config: dict):
 
         print(f"Running validation for epoch {epoch+1}...")
         rec.eval()
-        batch_iter_val = dataloader.prepare_batches(ratings_val, movies_dataset, batch_size, device=rank_global)
+        batch_iter_val = dataloader.prepare_batches(ratings_val, movies_dataset, batch_size, device=f"cuda:{rank_global}")
         sum_loss = 0.0
         sum_rows = 0
 
@@ -257,7 +256,7 @@ def train_func(config: dict):
             i += 1
         
         vloss = sum_loss/ratings_val.shape[0]
-        vloss = torch.Tensor([vloss]).to(rank_global)
+        vloss = torch.Tensor([vloss]).to(f"cuda:{rank_global}")
 
         dist.reduce(vloss, dst=0, op=dist.ReduceOp.SUM)
 
