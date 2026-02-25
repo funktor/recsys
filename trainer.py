@@ -28,14 +28,6 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 
-device = None
-if torch.cuda.is_available():
-    device = torch.device("cuda:0")
-elif torch.mps.is_available():
-    device = torch.device("mps")
-else:
-    device = torch.device("cpu")
-
 def ddp_setup():
     init_process_group(backend="nccl")
     torch.cuda.set_device(os.environ["RANK"])
@@ -285,4 +277,4 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     train_func(vars(args))
-    # python3 trainer.py --gcs_dir "gs://r6-ae-dev-adperf-adintelligence-data/amondal/parquet_dataset_ml_32m" --batch_size 128 --num_epochs 10 --accumulate_grad_batches 4
+    # torchrun --standalone --nproc_per_node=8 trainer.py --gcs_dir "gs://r6-ae-dev-adperf-adintelligence-data/amondal/parquet_dataset_ml_32m" --batch_size 128 --num_epochs 10 --accumulate_grad_batches 4
