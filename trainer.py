@@ -179,7 +179,7 @@ def train_func(config: dict):
 
     if rank_local == 0:
         model_out_dir = "/tmp/model_outputs"
-        os.makedirs(model_out_dir)
+        os.makedirs(model_out_dir, exist_ok=True)
 
     optimizer.zero_grad()
 
@@ -266,7 +266,7 @@ def train_func(config: dict):
 
                     if rank_global == 0:
                         print(f"Epoch: {epoch+1}, Batch: {i+1}, Loss (Rank 0): {sum_loss/sum_rows}")
-                        
+
             except StopIteration:
                 break
 
