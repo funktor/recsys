@@ -24,6 +24,7 @@ from torch.distributed import init_process_group
 from pathlib import Path
 from torch.nn.parallel import DistributedDataParallel as DDP
 from model import RecommenderSystem
+import datasets
 from datasets import Dataset
 
 # Ensure that all operations are deterministic on GPU (if used) for reproducibility
@@ -122,6 +123,57 @@ class CosineWarmupScheduler(optim.lr_scheduler._LRScheduler):
             lr_factor *= epoch * 1.0 / self.warmup
         return lr_factor
     
+
+def save_movie_embeddings(model:DDP, movies_dataset:Dataset, path:str, batch_size:int=1024, movie_emb_size:int=128):
+    movie_emb_mmap = np.memmap(path, dtype=np.float32, mode="w+", shape=(movies_dataset.shape[0], movie_emb_size))
+    movie_batch_iter = dataloader.get_unique_movies(movies_dataset, batch_size, device=0)
+    model:RecommenderSystem = model.module
+    
+    i = 0
+    while True:
+        try:
+            batch = next(movie_batch_iter)
+            movie_ids, movie_descriptions, movie_genres, movie_years = batch
+
+            with torch.no_grad():
+                output:torch.Tensor = \
+                    model.get_movie_embeddings(
+                        movie_ids, 
+                        movie_descriptions, 
+                        movie_genres, 
+                        movie_years
+                    )
+                
+                movie_emb_mmap[i:i+output.shape[0]] = output.numpy()
+                i += output.shape[0]
+
+        except StopIteration:
+            break
+
+
+def save_users_embeddings(model:DDP, ratings_dataset:Dataset, path:str, batch_size:int=1024, users_emb_size:int=128):
+    n = ratings_dataset['userId'].nunique()
+    users_emb_mmap = np.memmap(path, dtype=np.float32, mode="w+", shape=(n, users_emb_size))
+    users_batch_iter = dataloader.get_unique_users(ratings_dataset, batch_size, device=0)
+    model:RecommenderSystem = model.module
+    
+    i = 0
+    while True:
+        try:
+            user_ids = next(users_batch_iter)
+
+            with torch.no_grad():
+                output:torch.Tensor = \
+                    model.get_user_embeddings(
+                        user_ids
+                    )
+                
+                users_emb_mmap[i:i+output.shape[0]] = output.numpy()
+                i += output.shape[0]
+
+        except StopIteration:
+            break
+    
     
 def train_func(config: dict):
     print("Setting up DDP...")
@@ -141,6 +193,7 @@ def train_func(config: dict):
     max_num_epochs = config["num_epochs"]
     accumulate_grad_batches = config["accumulate_grad_batches"]
     model_path = config["existing_model_path"]
+    max_num_batches = config["max_num_batches"]
 
     print("Getting datasets...")
     ratings_train, ratings_val, movies_dataset = dataloader.get_datasets(datasets_gcs_path, world_size, rank_global)
@@ -150,6 +203,7 @@ def train_func(config: dict):
     print(f"Effective number of batches = {world_size*batch_size}")
 
     batches_per_epoch = num_train_data // (world_size*batch_size)
+    batches_per_epoch = min(batches_per_epoch, max_num_batches)
 
     print(f"Rank={rank_global}: Train data size   = {ratings_train.shape[0]}")
     print(f"Rank={rank_global}: Val data size     = {ratings_val.shape[0]}")
@@ -273,6 +327,9 @@ def train_func(config: dict):
                 break
 
             i += 1
+
+            if i >= max_num_batches:
+                break
         
         vloss = sum_loss/ratings_val.shape[0]
         vloss = torch.Tensor([vloss]).to(rank_global)
@@ -289,36 +346,37 @@ def train_func(config: dict):
                 best_vloss = avg_vloss
                 checkpoint(rec.module, optimizer, os.path.join(model_out_dir, f"checkpoint-best-vloss.pth"))
     
-    print("Saving model...")
+    model:RecommenderSystem = rec.module
+
     if rank_local == 0:
-        checkpoint(rec.module, optimizer, os.path.join(model_out_dir, f"final_model.pth"))
-
-
-def save_movie_embeddings(model:DDP, movies_dataset:Dataset, path:str, batch_size:int=1024):
-    movie_emb_mmap = np.memmap(path, dtype=np.float32, mode="w+", shape=(movies_dataset.shape[0], 128))
-    movie_batch_iter = dataloader.get_unique_movies(movies_dataset, batch_size, device=0)
-    model:RecommenderSystem = model.module
+        print("Saving model...")
+        checkpoint(model, optimizer, os.path.join(model_out_dir, f"final_model.pth"))
     
-    i = 0
-    while True:
-        try:
-            batch = next(movie_batch_iter)
-            movie_ids, movie_descriptions, movie_genres, movie_years = batch
+    if rank_local == 0:
+        print("Saving movie embeddings...")
+        os.makedirs("movie_embeddings", exist_ok=True)
+        save_movie_embeddings(
+            model, 
+            movies_dataset, 
+            "movie_embeddings/embeds.mmap", 
+            batch_size=1024, 
+            movie_emb_size=model.movie_embedding_size
+        )
+        
+        print("Getting all ratings train data...")
+        ratings_train_full = datasets.load_dataset("parquet", data_dir=ratings_train_path, split="train")
+        ratings_train_full = ratings_train_full.select_columns("userId")
+        ratings_train_full.set_format("pandas")
 
-            with torch.no_grad():
-                output:torch.Tensor = \
-                    model.get_movie_embeddings(
-                        movie_ids, 
-                        movie_descriptions, 
-                        movie_genres, 
-                        movie_years
-                    )
-                
-                movie_emb_mmap[i:i+output.shape[0]] = output.numpy()
-                i += output.shape[0]
-
-        except StopIteration:
-            break
+        print("Saving users embeddings...")
+        os.makedirs("users_embeddings", exist_ok=True)
+        save_users_embeddings(
+            model, 
+            ratings_train_full, 
+            "users_embeddings/embeds.mmap", 
+            batch_size=1024, 
+            users_emb_size=model.user_embedding_size
+        )
 
 
 if __name__ == "__main__":
@@ -328,6 +386,8 @@ if __name__ == "__main__":
                         help='Path to GCS directory')
     parser.add_argument('--batch_size', type=int, default=128,
                         help='Batch size per worker')
+    parser.add_argument('--max_num_batches', type=int, default=1e9,
+                        help='Maximum batches for debugging')
     parser.add_argument('--num_epochs', type=int, default=40,
                         help='Maximum number of training epochs')
     parser.add_argument('--accumulate_grad_batches', type=int, default=4,
@@ -338,4 +398,4 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     train_func(vars(args))
-    # torchrun --standalone --nproc_per_node=8 trainer.py --gcs_dir "gs://r6-ae-dev-adperf-adintelligence-data/amondal/parquet_dataset_ml_32m" --batch_size 128 --num_epochs 10 --accumulate_grad_batches 4
+    # torchrun --standalone --nproc_per_node=8 trainer.py --gcs_dir "gs://r6-ae-dev-adperf-adintelligence-data/amondal/parquet_dataset_ml_32m" --batch_size 128 --num_epochs 10 --accumulate_grad_batches 4 --max_num_batches 100

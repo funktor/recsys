@@ -139,5 +139,19 @@ def get_unique_movies(movies_dataset:pd.DataFrame, batch_size=128, device="gpu")
         yield [movie_ids, movie_descriptions, movie_genres, movie_years]
 
 
+def get_unique_users(ratings_dataset:pd.DataFrame, batch_size=128, device="gpu"):
+    ratings_dataset_df = ratings_dataset.drop_duplicates()
+    n = ratings_dataset_df.shape[0]
+
+    for i in range(0, n, batch_size):
+        df_ratings_batch_df:pd.DataFrame = ratings_dataset_df[i:min(n,i+batch_size)]
+        df_ratings_batch_df = df_ratings_batch_df.reset_index()
+
+        user_ids = df_ratings_batch_df["userId"].to_numpy(dtype=np.int32)
+        user_ids = torch.from_numpy(user_ids).to(device=device)
+
+        yield user_ids
+
+
 
 

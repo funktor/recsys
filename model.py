@@ -179,6 +179,7 @@ class MovieId:
             cls.movie_id_emb = nn.Embedding(movie_id_size, emb_size, padding_idx=0)
         return cls.movie_id_emb
     
+    
 def emb_averaging(inp:torch.Tensor, emb_layer:nn.Module, padding_idx:int=0):
     # inp : (batch, num_tokens)
     embeddings = emb_layer(inp) # (batch, num_tokens, emb_size)
@@ -189,6 +190,7 @@ def emb_averaging(inp:torch.Tensor, emb_layer:nn.Module, padding_idx:int=0):
     sequence_lengths = torch.clamp(sequence_lengths, min=1.0)
     averaged_embeddings = sum_embeddings / sequence_lengths # (batch, emb_size)
     return averaged_embeddings
+
 
 class MovieEncoder(nn.Module):
     def __init__(
@@ -203,12 +205,12 @@ class MovieEncoder(nn.Module):
         
         super(MovieEncoder, self).__init__()
         
-        self.movie_id_emb = MovieId(movie_id_size, 128)
-        self.movie_desc_emb = nn.Embedding(movie_desc_size, 128, padding_idx=0)
-        self.movie_genres_emb = nn.Embedding(movie_genres_size, 32, padding_idx=0)
-        self.movie_year_emb = nn.Embedding(movie_year_size, 32, padding_idx=0)
+        self.movie_id_emb = MovieId(movie_id_size, embedding_size)
+        self.movie_desc_emb = nn.Embedding(movie_desc_size, 256, padding_idx=0)
+        self.movie_genres_emb = nn.Embedding(movie_genres_size, 8, padding_idx=0)
+        self.movie_year_emb = nn.Embedding(movie_year_size, 16, padding_idx=0)
 
-        self.fc_concat = nn.Linear(320, embedding_size)
+        self.fc_concat = nn.Linear(embedding_size + 280, embedding_size)
         init_weights(self.fc_concat)
 
         self.fc = nn.Sequential(
@@ -218,7 +220,7 @@ class MovieEncoder(nn.Module):
             nn.LayerNorm(embedding_size)
         )
 
-        self.cross_features = CrossFeatureLayer(320, 3, 0.0)
+        self.cross_features = CrossFeatureLayer(embedding_size + 280, 3, 0.0)
 
     def forward(
             self, 
@@ -228,75 +230,36 @@ class MovieEncoder(nn.Module):
             years:torch.Tensor
         ):
 
-        id_emb = self.movie_id_emb(ids) # (batch, 128)
-        desc_emb = emb_averaging(descriptions, self.movie_desc_emb) # (batch, 128)
-        genres_emb = emb_averaging(genres, self.movie_genres_emb) # (batch, 32)
-        years_emb = self.movie_year_emb(years) # (batch, 32)
+        id_emb = self.movie_id_emb(ids) # (batch, embedding_size)
+        desc_emb = emb_averaging(descriptions, self.movie_desc_emb) # (batch, 256)
+        genres_emb = emb_averaging(genres, self.movie_genres_emb) # (batch, 8)
+        years_emb = self.movie_year_emb(years) # (batch, 16)
 
-        movie_embedding = torch.concat([id_emb, desc_emb, genres_emb, years_emb], dim=-1) # (batch, 320)
-        movie_embedding = self.cross_features(movie_embedding) + movie_embedding # (batch, 320)
+        movie_embedding = torch.concat([id_emb, desc_emb, genres_emb, years_emb], dim=-1) # (batch, embedding_size + 280)
+        movie_embedding = self.cross_features(movie_embedding) + movie_embedding # (batch, embedding_size + 280)
         movie_embedding = self.fc(movie_embedding) # (batch, embedding_size)
 
         return movie_embedding
     
+    
 class UserEncoder(nn.Module):
     def __init__(
             self, 
-            user_id_size, 
-            movie_id_size,
-            embedding_size, 
-            prev_rated_seq_len, 
-            num_encoder_layers, 
-            num_heads=2, 
-            dim_ff=128,
-            dropout=0.0
+            user_id_size,
+            embedding_size
         ) -> None:
 
         super(UserEncoder, self).__init__()
-
-        self.user_id_emb = nn.Embedding(user_id_size, 128, padding_idx=0)
-        self.movie_id_emb = MovieId(movie_id_size, 128)
-
-        self.positional_encoding = PositionalEncoding(128, prev_rated_seq_len, 0.0)
-        self.encoder_block = Encoder(num_encoder_layers, 128, num_heads, dim_ff, 0.0)
-
-        self.fc_concat = nn.Linear(256, embedding_size)
-        init_weights(self.fc_concat)
-
-        self.fc = nn.Sequential(
-            self.fc_concat,
-            nn.GELU(),
-            nn.Dropout(dropout),
-            nn.LayerNorm(embedding_size)
-        )
-
-        self.num_heads = num_heads
-
+        self.user_id_emb = nn.Embedding(user_id_size, embedding_size, padding_idx=0)
 
     def forward(
             self, 
-            user_ids:torch.Tensor, # (batch,)
-            prev_rated_movie_ids:torch.Tensor, # (batch, seq_len)
-            prev_ratings:torch.Tensor # (batch, seq_len)
+            user_ids:torch.Tensor # (batch,)
         ):
-        user_id_emb:torch.Tensor = self.user_id_emb(user_ids) # (batch, 128)
 
-        # mask the paddings from attention
-        mask = (prev_rated_movie_ids != 0).float().unsqueeze(-1) # (batch, prev_rated_seq_len, 1)
-        mask = torch.matmul(mask, mask.transpose(-2,-1)).unsqueeze(1).repeat(1,self.num_heads,1,1) # (batch, num_heads, prev_rated_seq_len, prev_rated_seq_len)
-        
-        rated_movie_emb = self.movie_id_emb(prev_rated_movie_ids)   # (batch, prev_rated_seq_len, 128)
-        rated_movie_emb = self.positional_encoding(rated_movie_emb) # (batch, prev_rated_seq_len, 128)
-        rated_movie_emb = self.encoder_block(rated_movie_emb, mask) # (batch, prev_rated_seq_len, 128)
-
-        rated_movie_ratings = prev_ratings.unsqueeze(1) # (batch, 1, prev_rated_seq_len)
-        # weighted sum of ratings
-        rated_movie_emb_weighted = torch.matmul(rated_movie_ratings, rated_movie_emb).squeeze(1) # (batch, 128)
-
-        user_embedding = torch.concat([user_id_emb, rated_movie_emb_weighted], dim=-1) # (batch, 256)
-        user_embedding = self.fc(user_embedding) + user_id_emb + rated_movie_emb_weighted # (batch, embedding_size)
-
+        user_embedding:torch.Tensor = self.user_id_emb(user_ids) # (batch, embedding_size)
         return user_embedding
+        
     
 class RecommenderSystem(nn.Module):
     def __init__(
@@ -320,6 +283,9 @@ class RecommenderSystem(nn.Module):
 
         super(RecommenderSystem, self).__init__()
 
+        self.user_embedding_size = user_embedding_size
+        self.movie_embedding_size = movie_embedding_size
+
         self.movie_encoder = \
             MovieEncoder\
             (
@@ -334,15 +300,29 @@ class RecommenderSystem(nn.Module):
         self.user_encoder = \
             UserEncoder\
             (
-                user_id_size, 
-                movie_id_size,
-                user_embedding_size, 
+                user_id_size,
+                user_embedding_size
+            )
+                
+        self.movie_id_emb = self.movie_encoder.movie_id_emb
+
+        self.user_prev_positional_encoding = \
+            PositionalEncoding(
+                movie_embedding_size, 
                 user_prev_rated_seq_len, 
-                user_num_encoder_layers, 
-                user_num_heads, 
-                user_dim_ff,
                 user_dropout
             )
+        
+        self.user_prev_encoder_block = \
+            Encoder(
+                user_num_encoder_layers, 
+                movie_embedding_size, 
+                user_num_heads, 
+                user_dim_ff, 
+                user_dropout
+            )
+
+        self.user_prev_num_heads = user_num_heads
 
         self.fc_concat = nn.Linear(user_embedding_size + movie_embedding_size, embedding_size)
         init_weights(self.fc_concat)
@@ -382,17 +362,13 @@ class RecommenderSystem(nn.Module):
     
     def get_user_embeddings(
             self, 
-            user_ids:torch.Tensor, # (batch,)
-            user_prev_rated_movie_ids:torch.Tensor, # (batch, seq)
-            user_prev_ratings:torch.Tensor, # (batch, seq)
+            user_ids:torch.Tensor # (batch,)
     ):
         
         return \
             self.user_encoder\
                 (
-                    user_ids, 
-                    user_prev_rated_movie_ids, 
-                    user_prev_ratings,
+                    user_ids
                 )  
 
     def forward(
@@ -418,10 +394,22 @@ class RecommenderSystem(nn.Module):
         user_embeddings = \
             self.get_user_embeddings\
                 (
-                    user_ids, 
-                    user_prev_rated_movie_ids, 
-                    user_prev_ratings,
+                    user_ids
                 )                               # (batch, user_embedding_size)
+        
+        # mask the paddings from attention
+        mask = (user_prev_rated_movie_ids != 0).float().unsqueeze(-1) # (batch, prev_rated_seq_len, 1)
+        mask = torch.matmul(mask, mask.transpose(-2,-1)).unsqueeze(1).repeat(1, self.user_prev_num_heads, 1, 1) # (batch, num_heads, prev_rated_seq_len, prev_rated_seq_len)
+        
+        rated_movie_emb = self.movie_id_emb(user_prev_rated_movie_ids)   # (batch, prev_rated_seq_len, movie_embedding_size)
+        rated_movie_emb = self.user_prev_positional_encoding(rated_movie_emb) # (batch, prev_rated_seq_len, movie_embedding_size)
+        rated_movie_emb = self.user_prev_encoder_block(rated_movie_emb, mask) # (batch, prev_rated_seq_len, movie_embedding_size)
+
+        rated_movie_ratings = user_prev_ratings.unsqueeze(1) # (batch, 1, prev_rated_seq_len)
+        # weighted sum of ratings
+        rated_movie_emb_weighted = torch.matmul(rated_movie_ratings, rated_movie_emb).squeeze(1) # (batch, movie_embedding_size)
+
+        movie_embeddings = movie_embeddings + rated_movie_emb_weighted # (batch, movie_embedding_size)
         
         emb_concat = torch.concat([movie_embeddings, user_embeddings], dim=-1) # (batch, movie_embedding_size + user_embedding_size)
         
