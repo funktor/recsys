@@ -146,7 +146,7 @@ def train_func(config: dict):
     num_train_data = count_rows_in_gcs_parquet(ratings_train_path)
     print(f"Total Training Data = {num_train_data}")
     print(f"Effective number of batches = {world_size*batch_size}")
-    
+
     batches_per_epoch = num_train_data // (world_size*batch_size)
 
     print(f"Rank={rank_global}: Train data size   = {ratings_train.shape[0]}")
@@ -193,9 +193,9 @@ def train_func(config: dict):
         batch_iter = dataloader.prepare_batches(ratings_train, movies_dataset, batch_size, device=rank_global)
         i = 0
         while True:
-            batch = next(batch_iter)
+            try:
+                batch = next(batch_iter)
 
-            if batch:
                 data, labels = batch
                 user_ids, user_prev_rated_movie_ids, user_prev_ratings, movie_ids, movie_descriptions, movie_genres, movie_years = data
 
@@ -225,7 +225,8 @@ def train_func(config: dict):
                     optimizer.step()
                     scheduler.step()
                     optimizer.zero_grad()
-            else:
+
+            except StopIteration:
                 break
 
             i += 1
@@ -241,9 +242,9 @@ def train_func(config: dict):
 
         i = 0
         while True:
-            batch = next(batch_iter_val)
+            try:
+                batch = next(batch_iter_val)
 
-            if batch:
                 data, labels = batch
                 user_ids, user_prev_rated_movie_ids, user_prev_ratings, movie_ids, movie_descriptions, movie_genres, movie_years = data
 
@@ -265,7 +266,8 @@ def train_func(config: dict):
 
                     if rank_global == 0:
                         print(f"Epoch: {epoch+1}, Batch: {i+1}, Loss (Rank 0): {sum_loss/sum_rows}")
-            else:
+                        
+            except StopIteration:
                 break
 
             i += 1
