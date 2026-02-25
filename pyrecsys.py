@@ -857,8 +857,9 @@ if __name__ == '__main__':
 # 
 # Deep Generative Retreival Semantic ID
 # seq dataset : (user_id, prev_N_rated_movie_titles_tokens, prev_N_rated_movie_genres, prev_N_rated_movie_years, prev_N_rated_movie_tags, prev_N_rated_movie_ratings, next_rated_movie_titles_tokens, next_rated_movie_genres, next_rated_movie_year, next_rated_movie_tags) 
-# feature hashing - user_id, movie_id (murmurhash3, cuckoo hashing)
 # semantic id generation - movies - VQVAE / RQVAE network (enh - c++/cuda impl)
 # encoder-decoder transformer network
 # pytorch distributed training (DDP) multi-gpu and multi-node
 # index movie embeddings/semantic IDS
+# 
+# custom loss, optimizer, pos encoder, transformer in C++/CUDA
