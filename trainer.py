@@ -30,7 +30,7 @@ torch.backends.cudnn.benchmark = False
 
 def ddp_setup():
     init_process_group(backend="nccl")
-    torch.cuda.set_device(f"cuda:{int(os.environ["RANK"])}")
+    torch.cuda.set_device(f"cuda:{int(os.environ['RANK'])}")
 
 def checkpoint(model:nn.Module, optimizer:torch.optim.Optimizer, filename):
     torch.save({'optimizer':optimizer.state_dict(), 'model':model.state_dict()}, filename)
