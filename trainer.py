@@ -253,15 +253,21 @@ def train_func(config: dict):
                     sum_rows += output.shape[0]
 
                     if rank_global == 0:
-                        print(f"Epoch: {epoch+1}, Batch: {i+1}, Loss: {sum_loss/sum_rows}")
+                        print(f"Epoch: {epoch+1}, Batch: {i+1}, Loss (Rank 0): {sum_loss/sum_rows}")
             else:
                 break
 
             i += 1
         
         vloss = sum_loss/ratings_val.shape[0]
-        print(f"Validation Loss: {vloss}")
-        print()
+        vloss = torch.Tensor([vloss]).to(rank_global)
+
+        dist.reduce(vloss, dst=0, op=dist.ReduceOp.SUM)
+
+        if rank_global == 0:
+            avg_vloss = vloss.item()/world_size
+            print(f"Epoch: {epoch+1}, Batch: {i+1}, Average Validation Loss: {avg_vloss}")
+            print()
 
 
 if __name__ == "__main__":
