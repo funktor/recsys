@@ -851,7 +851,7 @@ if __name__ == '__main__':
 # model training - adamw, cosine learning rate scheduler, accumulate grad batches, automatic mixed precision training
 # negative samples mining - movie features -> autoencoders/vae/vq-vae/rq-vae -> product quantization -> for each +ve movie, find most similar -ve movies
 # user embedding x movie embedding = 1/0 (contrastive loss training) (enh - custom cuda loss func)
-# pytorch distributed training (DDP) multi-gpu and multi-node, (enh - C++-MPI training)
+# pytorch distributed training (DDP) multi-gpu and multi-node, (torchrun, mpirun, enh - C++-MPI training)
 # streaming from disk training (lightning, hf datasets, memory mapping, parquet, pyarrow) (enh - c++ memory mapping impl)
 # index movie embeddings (product quantization, LSH, HNSW, KD-Tree) (enh - c++/cuda prd quant, hnsw..)
 # user embedding - Approx Nearest Neighbor Search (Top K nearest movie embeddings) (enh - c++/cuda extension)

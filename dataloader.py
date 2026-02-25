@@ -59,30 +59,30 @@ def pre_partitions_for_download(path:str, world_size, rank):
     train_files = pre_partitions_with_files(partitions, world_size, rank)
     return train_files
 
-
-def get_vocabulary(gs_path:str, local_path:str):
+def download_vocabulary(gs_path:str, local_path:str):
     storage_client = storage.Client()
     path_splits = gs_path.split('/')
     bucket_name = path_splits[2]
     bucket = storage_client.bucket(bucket_name)
     blob = bucket.blob('/'.join(path_splits[3:]))
     blob.download_to_filename(local_path)
+
+def get_vocabulary(local_path:str):
     vocabulary = joblib.load(local_path)
     return vocabulary
 
 
-def get_datasets(path:str):
-    # world_size, rank = get_world_info()
-    # print(f"WORLD_SIZE={world_size} RANK={rank}")
-
-    world_size, rank = 1, 0
-    
-    train_files = pre_partitions_for_download(f"{path}/train", world_size, rank)
-    ratings_train = datasets.load_dataset("parquet", data_files=train_files, split="train", cache_dir="/tmp/huggingface")
+def get_datasets(path:str, world_size:int, rank_local:int):
+    train_files = pre_partitions_for_download(f"{path}/train", world_size, rank_local)
+    cache_dir_train = f"/tmp/huggingface/{rank_local}/train"
+    os.makedirs(cache_dir_train, exist_ok=True)
+    ratings_train = datasets.load_dataset("parquet", data_files=train_files, split="train", cache_dir=cache_dir_train)
     ratings_train.set_format("pandas")
 
-    val_files = pre_partitions_for_download(f"{path}/validation", world_size, rank)
-    ratings_val = datasets.load_dataset("parquet", data_files=val_files, split="train")
+    val_files = pre_partitions_for_download(f"{path}/validation", world_size, rank_local)
+    cache_dir_val = f"/tmp/huggingface/{rank_local}/val"
+    os.makedirs(cache_dir_val, exist_ok=True)
+    ratings_val = datasets.load_dataset("parquet", data_files=val_files, split="train", cache_dir=cache_dir_val)
     ratings_val.set_format("pandas")
 
     movies_dataset = datasets.load_dataset("parquet", data_files=f"{path}/movies.parquet", split="train", keep_in_memory=True)

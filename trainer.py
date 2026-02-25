@@ -19,6 +19,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 import torch.utils.data as data
+import torch.distributed as dist
+from torch.distributed import init_process_group
+from pathlib import Path
+from torch.nn.parallel import DistributedDataParallel as DDP
 
 # Ensure that all operations are deterministic on GPU (if used) for reproducibility
 torch.backends.cudnn.deterministic = True
@@ -31,6 +35,10 @@ elif torch.mps.is_available():
     device = torch.device("mps")
 else:
     device = torch.device("cpu")
+
+def ddp_setup():
+    init_process_group(backend="nccl")
+    torch.cuda.set_device(os.environ["LOCAL_RANK"])
 
 def checkpoint(model:nn.Module, optimizer:torch.optim.Optimizer, filename):
     torch.save({'optimizer':optimizer.state_dict(), 'model':model.state_dict()}, filename)
@@ -66,7 +74,7 @@ def count_rows_in_gcs_parquet(parquet_path:str):
     return total_rows
 
 
-def get_trainer_and_optimizer(vocabulary:dict, device):
+def get_trainer_and_optimizer(vocabulary:dict, rank:int):
     user_id_size = len(vocabulary["userId"])+1
     movie_id_size = len(vocabulary["movieId"])+1
     user_embedding_size = 128
@@ -98,7 +106,7 @@ def get_trainer_and_optimizer(vocabulary:dict, device):
             movie_embedding_size, 
             movie_dropout,
             embedding_size
-        ).to(device=device)
+        ).to(rank)
     
     optimizer = optim.Adam(rec.parameters(), lr=0.0001)
     return rec, optimizer
@@ -122,10 +130,15 @@ class CosineWarmupScheduler(optim.lr_scheduler._LRScheduler):
     
     
 def train_func(config: dict):
-    # world_size = ray.train.get_context().get_world_size()
-    # rank = ray.train.get_context().get_local_rank()
+    world_size, rank_local, rank_global = 1, 0, 0
 
-    world_size, rank = 1, 0
+    print("Setting up DDP...")
+    if dist.is_initialized() is False:
+        ddp_setup()
+
+        rank_local  = os.environ["LOCAL_RANK"]
+        rank_global = os.environ["RANK"]
+        world_size  = os.environ["WORLD_SIZE"]
 
     datasets_gcs_path = config["gcs_dir"]
     ratings_train_path = f"{datasets_gcs_path}/train/*.parquet"
@@ -134,22 +147,40 @@ def train_func(config: dict):
     max_num_epochs = config["num_epochs"]
     accumulate_grad_batches = config["accumulate_grad_batches"]
 
-    ratings_train, ratings_val, movies_dataset = dataloader.get_datasets(datasets_gcs_path)
+    print("Getting datasets...")
+    ratings_train, ratings_val, movies_dataset = dataloader.get_datasets(datasets_gcs_path, world_size, rank_global)
 
     num_train_data = count_rows_in_gcs_parquet(ratings_train_path)
-    batches_per_epoch = 100 #num_train_data // (world_size*batch_size)
+    batches_per_epoch = num_train_data // (world_size*batch_size)
 
-    os.makedirs(f"/tmp/{rank}", exist_ok=True)
-    vocabulary = dataloader.get_vocabulary(path_vocab, f"/tmp/{rank}/vocabulary.pkl")
+    print("Downloading vocabulary...")
+    if rank_local == 0:
+        dataloader.download_vocabulary(path_vocab, "/tmp/vocabulary.pkl")
+        Path('/tmp/marker_file.txt').touch()
+    else:
+        while True:
+            if os.path.exists('/tmp/marker_file.txt'):
+                break
 
-    rec, optimizer = get_trainer_and_optimizer(vocabulary, device)
+    print("Reading vocabulary...")
+    vocabulary = dataloader.get_vocabulary("/tmp/vocabulary.pkl")
+
+    if rank_local == 0:
+        Path('/tmp/marker_file.txt').unlink(missing_ok=True)
+
+    print("Getting model and optimizer...")
+    rec, optimizer = get_trainer_and_optimizer(vocabulary, rank_global)
+    rec = DDP(rec, device_ids=[rank_global])
+
     optimizer.zero_grad()
 
     criterion = nn.MSELoss()
     scheduler = CosineWarmupScheduler(optimizer, warmup=50, max_iters=batches_per_epoch*max_num_epochs/accumulate_grad_batches)
 
     for epoch in range(max_num_epochs):
+        print(f"Starting epoch {i+1}...")
         rec.train()
+
         batch_iter = dataloader.prepare_batches(ratings_train, movies_dataset, batch_size, device=device)
         i = 0
         while True:
@@ -170,16 +201,21 @@ def train_func(config: dict):
                         movie_years
                     )
                 
-                loss:torch.Tensor = criterion(output.contiguous(), labels.contiguous())
-                loss /= accumulate_grad_batches
-                loss.backward()
+                batch_loss:torch.Tensor = criterion(output.contiguous(), labels.contiguous())
+                batch_loss /= accumulate_grad_batches
+                batch_loss.backward()
 
                 if (i+1) % accumulate_grad_batches == 0:
+                    dist.reduce(batch_loss, dst=0, op=dist.ReduceOp.SUM)
+
+                    if rank_global == 0:
+                        avg_loss = batch_loss.item()/world_size
+                        print(f"Epoch: {epoch+1}, Batch: {i+1}, Average Loss: {avg_loss}")
+
                     nn.utils.clip_grad_norm_(rec.parameters(), max_norm=1.0)
                     optimizer.step()
                     scheduler.step()
                     optimizer.zero_grad()
-                    print(f"Epoch: {epoch+1}, Batch: {i+1}, Loss: {loss.item()}")
             else:
                 break
 
@@ -188,9 +224,11 @@ def train_func(config: dict):
             if i >= batches_per_epoch:
                 break
 
+        print(f"Running validation for epoch {i+1}...")
         rec.eval()
         batch_iter_val = dataloader.prepare_batches(ratings_val, movies_dataset, batch_size, device=device)
         sum_loss = 0.0
+        sum_rows = 0
 
         i = 0
         while True:
@@ -212,9 +250,12 @@ def train_func(config: dict):
                             movie_years
                         )
                 
-                    loss:torch.Tensor = criterion(output.contiguous(), labels.contiguous())
-                    sum_loss += output.shape[0]*loss.item()
-                    print(f"Epoch: {epoch+1}, Batch: {i+1}, Loss: {sum_loss/(batch_size*(i+1))}")
+                    batch_loss:torch.Tensor = criterion(output.contiguous(), labels.contiguous())
+                    sum_loss += output.shape[0]*batch_loss.item()
+                    sum_rows += output.shape[0]
+
+                    if rank_global == 0:
+                        print(f"Epoch: {epoch+1}, Batch: {i+1}, Loss: {sum_loss/sum_rows}")
             else:
                 break
 
