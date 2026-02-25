@@ -294,24 +294,16 @@ def train_func(config: dict):
         checkpoint(rec.module, optimizer, os.path.join(model_out_dir, f"final_model.pth"))
 
 
-def save_embeddings(model:DDP, ratings_train:Dataset, movies_dataset:Dataset, path:str, batch_size:int=1024):
-    print("Getting datasets...")
-    movie_emb_mmap = np.memmap(path, dtype=np.float32, mode="w+", shape=ratings_train.shape)
-    movie_emb_mmap = np.memmap(path, dtype=np.float32, mode="w+", shape=ratings_train.shape)
-
-    movie_emb_map = {}
-    users_emb_map = {}
-
-    batch_iter = dataloader.prepare_batches(ratings_train, movies_dataset, batch_size, device=0)
+def save_movie_embeddings(model:DDP, movies_dataset:Dataset, path:str, batch_size:int=1024):
+    movie_emb_mmap = np.memmap(path, dtype=np.float32, mode="w+", shape=(movies_dataset.shape[0], 128))
+    movie_batch_iter = dataloader.get_unique_movies(movies_dataset, batch_size, device=0)
     model:RecommenderSystem = model.module
     
     i = 0
     while True:
         try:
-            batch = next(batch_iter)
-            data, labels = batch
-            user_ids, user_prev_rated_movie_ids, user_prev_ratings, movie_ids, movie_descriptions, movie_genres, movie_years = data
-            
+            batch = next(movie_batch_iter)
+            movie_ids, movie_descriptions, movie_genres, movie_years = batch
 
             with torch.no_grad():
                 output:torch.Tensor = \
@@ -321,10 +313,12 @@ def save_embeddings(model:DDP, ratings_train:Dataset, movies_dataset:Dataset, pa
                         movie_genres, 
                         movie_years
                     )
+                
+                movie_emb_mmap[i:i+output.shape[0]] = output.numpy()
+                i += output.shape[0]
+
         except StopIteration:
             break
-                    
-    model.get_movie_embeddings()
 
 
 if __name__ == "__main__":

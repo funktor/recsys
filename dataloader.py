@@ -119,3 +119,25 @@ def prepare_batches(ratings_dataset:Dataset, movies_dataset:pd.DataFrame, batch_
         yield [user_ids, user_prev_rated_movie_ids, user_prev_ratings, movie_ids, movie_descriptions, movie_genres, movie_years], labels
 
 
+def get_unique_movies(movies_dataset:pd.DataFrame, batch_size=128, device="gpu"):
+    n = movies_dataset.shape[0]
+
+    for i in range(0, n, batch_size):
+        movies_dataset_batch_df:pd.DataFrame = movies_dataset[i:min(n,i+batch_size)]
+        movies_dataset_batch_df = movies_dataset_batch_df.reset_index()
+
+        movie_ids = movies_dataset_batch_df["movieId"].to_numpy(dtype=np.int32)
+        movie_descriptions = pad_batch(movies_dataset_batch_df["description"].to_numpy(), dtype=np.int32)
+        movie_genres = pad_batch(movies_dataset_batch_df["genres"].to_numpy(), dtype=np.int32)
+        movie_years = movies_dataset_batch_df["movie_year"].to_numpy(dtype=np.int32)
+
+        movie_ids = torch.from_numpy(movie_ids).to(device=device)
+        movie_descriptions = torch.from_numpy(movie_descriptions).to(device=device)
+        movie_genres = torch.from_numpy(movie_genres).to(device=device)
+        movie_years = torch.from_numpy(movie_years).to(device=device)
+
+        yield [movie_ids, movie_descriptions, movie_genres, movie_years]
+
+
+
+
