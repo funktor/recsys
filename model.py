@@ -363,6 +363,37 @@ class RecommenderSystem(nn.Module):
             self.fc_out
         )
 
+    def get_movie_embeddings(
+            self, 
+            movie_ids:torch.Tensor, # (batch,)
+            movie_descriptions:torch.Tensor, # (batch, ntokens)
+            movie_genres:torch.Tensor, # (batch, ntokens)
+            movie_years:torch.Tensor # (batch,))
+    ):
+        
+        return \
+            self.movie_encoder\
+                (
+                    movie_ids, 
+                    movie_descriptions, 
+                    movie_genres, 
+                    movie_years
+                ) 
+    
+    def get_user_embeddings(
+            self, 
+            user_ids:torch.Tensor, # (batch,)
+            user_prev_rated_movie_ids:torch.Tensor, # (batch, seq)
+            user_prev_ratings:torch.Tensor, # (batch, seq)
+    ):
+        
+        return \
+            self.user_encoder\
+                (
+                    user_ids, 
+                    user_prev_rated_movie_ids, 
+                    user_prev_ratings,
+                )  
 
     def forward(
             self, 
@@ -376,16 +407,16 @@ class RecommenderSystem(nn.Module):
         ):
         
         movie_embeddings = \
-            self.movie_encoder\
-            (
-                movie_ids, 
-                movie_descriptions, 
-                movie_genres, 
-                movie_years
-            )                                   # (batch, movie_embedding_size)
+            self.get_movie_embeddings\
+                (
+                    movie_ids,
+                    movie_descriptions,
+                    movie_genres,
+                    movie_years
+                )                                  # (batch, movie_embedding_size)
         
         user_embeddings = \
-            self.user_encoder\
+            self.get_user_embeddings\
                 (
                     user_ids, 
                     user_prev_rated_movie_ids, 

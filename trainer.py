@@ -23,6 +23,7 @@ import torch.distributed as dist
 from torch.distributed import init_process_group
 from pathlib import Path
 from torch.nn.parallel import DistributedDataParallel as DDP
+from model import RecommenderSystem
 
 # Ensure that all operations are deterministic on GPU (if used) for reproducibility
 torch.backends.cudnn.deterministic = True
@@ -83,7 +84,7 @@ def get_trainer_and_optimizer(vocabulary:dict, rank:int):
     embedding_size = 128
 
     rec = \
-        model.RecommenderSystem(
+        RecommenderSystem(
             user_id_size, 
             user_embedding_size, 
             user_prev_rated_seq_len, 
@@ -173,8 +174,8 @@ def train_func(config: dict):
         rec, optimizer = load_model(model_path)
     else:
         rec, optimizer = get_trainer_and_optimizer(vocabulary, rank_global)
-        rec = DDP(rec, device_ids=[rank_global], find_unused_parameters=True)
-
+    
+    rec = DDP(rec, device_ids=[rank_global], find_unused_parameters=True)
     best_vloss = float("Inf")
 
     if rank_local == 0:
@@ -277,7 +278,7 @@ def train_func(config: dict):
 
         dist.reduce(vloss, dst=0, op=dist.ReduceOp.SUM)
 
-        if rank_global == 0:
+        if rank_local == 0:
             avg_vloss = vloss.item()/world_size
             print(f"Average Validation Loss: {avg_vloss}")
             print()
@@ -285,10 +286,17 @@ def train_func(config: dict):
             
             if avg_vloss < best_vloss:
                 best_vloss = avg_vloss
-                checkpoint(rec, optimizer, os.path.join(model_out_dir, f"checkpoint-best-vloss.pth"))
+                checkpoint(rec.module, optimizer, os.path.join(model_out_dir, f"checkpoint-best-vloss.pth"))
     
     print("Saving model...")
-    checkpoint(rec, optimizer, os.path.join(model_out_dir, f"final_model.pth"))
+    if rank_local == 0:
+        checkpoint(rec.module, optimizer, os.path.join(model_out_dir, f"final_model.pth"))
+
+
+# def save_movie_embeddings(model:DDP, path:str):
+#     mmap = np.memmap(path, dtype=np.float32, mode="w+", shape=)
+#     model:RecommenderSystem = model.module
+#     model.get_movie_embeddings()
 
 
 if __name__ == "__main__":
