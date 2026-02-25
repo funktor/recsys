@@ -143,6 +143,10 @@ def train_func(config: dict):
     num_train_data = count_rows_in_gcs_parquet(ratings_train_path)
     batches_per_epoch = num_train_data // (world_size*batch_size)
 
+    print(f"Rank={rank_global}: Train data size   = {ratings_train.shape[0]}")
+    print(f"Rank={rank_global}: Val data size     = {ratings_val.shape[0]}")
+    print(f"Rank={rank_global}: Batches per epoch = {batches_per_epoch}")
+
     print("Downloading vocabulary...")
     if rank_local == 0:
         dataloader.download_vocabulary(path_vocab, "/tmp/vocabulary.pkl")
@@ -196,11 +200,12 @@ def train_func(config: dict):
                 batch_loss.backward()
 
                 if (i+1) % accumulate_grad_batches == 0:
-                    dist.reduce(batch_loss, dst=0, op=dist.ReduceOp.SUM)
+                    if (i+1) % 1024:
+                        dist.reduce(batch_loss, dst=0, op=dist.ReduceOp.SUM)
 
-                    if rank_global == 0:
-                        avg_loss = batch_loss.item()/world_size
-                        print(f"Epoch: {epoch+1}, Batch: {i+1}, Average Loss: {avg_loss}")
+                        if rank_global == 0:
+                            avg_loss = batch_loss.item()/world_size
+                            print(f"Epoch: {epoch+1}, Batch: {i+1}, Average Loss: {avg_loss}")
 
                     nn.utils.clip_grad_norm_(rec.parameters(), max_norm=1.0)
                     optimizer.step()
