@@ -16,16 +16,6 @@ import torch.utils.data as data
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 
-device = None
-if torch.cuda.is_available():
-    device = torch.device("cuda:0")
-elif torch.mps.is_available():
-    device = torch.device("mps")
-else:
-    device = torch.device("cpu")
-    
-print("Device:", device)
-
 def attention(q:torch.Tensor, k:torch.Tensor, v:torch.Tensor, mask=None):
     d_k = q.size()[-1] # q,k,v : (batch, head, seq_len, embed_size_per_head)
     attn_logits = torch.matmul(q, k.transpose(-2, -1)) # (batch, head, seq_len, seq_len)

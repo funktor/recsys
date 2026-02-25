@@ -14,29 +14,6 @@ from google.cloud import storage
 import joblib
 from datasets import Dataset
 
-# try:
-#     from ray.train import get_context as ray_get_ctx
-# except Exception:
-#     ray_get_ctx = None
-
-
-def get_world_info():
-    """
-    Get world size and rank strictly from Ray Train.
-    Raises RuntimeError if not running inside a Ray Train session.
-    """
-    try:
-        import ray.train
-        # ray.train.get_context() raises RuntimeError if session is missing
-        ctx = ray.train.get_context()
-        return ctx.get_world_size(), ctx.get_world_rank()
-
-    except (ImportError, RuntimeError) as e:
-        # Catch ImportError (Ray not installed) or RuntimeError (No session)
-        raise RuntimeError(
-            "Distributed context missing: This script must be launched via Ray Train."
-        ) from e
-
 def pre_partitions_with_files(filepaths:List[str], world_size, rank):
     train_files = []
     for i in range(len(filepaths)):

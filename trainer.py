@@ -30,7 +30,7 @@ torch.backends.cudnn.benchmark = False
 
 def ddp_setup():
     init_process_group(backend="nccl")
-    torch.cuda.set_device(f"cuda:{int(os.environ['RANK'])}")
+    torch.cuda.set_device(int(os.environ["RANK"]))
 
 def checkpoint(model:nn.Module, optimizer:torch.optim.Optimizer, filename):
     torch.save({'optimizer':optimizer.state_dict(), 'model':model.state_dict()}, filename)
@@ -98,7 +98,7 @@ def get_trainer_and_optimizer(vocabulary:dict, rank:int):
             movie_embedding_size, 
             movie_dropout,
             embedding_size
-        ).to(f"cuda:{rank}")
+        ).to(rank)
     
     optimizer = optim.Adam(rec.parameters(), lr=0.0001)
     return rec, optimizer
@@ -130,12 +130,15 @@ def train_func(config: dict):
     rank_global = int(os.environ["RANK"])
     world_size  = int(os.environ["WORLD_SIZE"])
 
+    print(f"WORLD SIZE = {world_size}")
+
     datasets_gcs_path = config["gcs_dir"]
     ratings_train_path = f"{datasets_gcs_path}/train/*.parquet"
     path_vocab = f"{datasets_gcs_path}/vocabulary.pkl"
     batch_size = config["batch_size"]
     max_num_epochs = config["num_epochs"]
     accumulate_grad_batches = config["accumulate_grad_batches"]
+    model_path = config["existing_model_path"]
 
     print("Getting datasets...")
     ratings_train, ratings_val, movies_dataset = dataloader.get_datasets(datasets_gcs_path, world_size, rank_global)
@@ -163,8 +166,17 @@ def train_func(config: dict):
         Path('/tmp/marker_file.txt').unlink(missing_ok=True)
 
     print("Getting model and optimizer...")
-    rec, optimizer = get_trainer_and_optimizer(vocabulary, rank_global)
-    rec = DDP(rec, device_ids=[rank_global], find_unused_parameters=True)
+    if model_path and os.path.exists(model_path):
+        rec, optimizer = load_model(model_path)
+    else:
+        rec, optimizer = get_trainer_and_optimizer(vocabulary, rank_global)
+        rec = DDP(rec, device_ids=[rank_global], find_unused_parameters=True)
+
+    best_vloss = float("Inf")
+
+    if rank_local == 0:
+        model_out_dir = "/tmp/model_outputs"
+        os.makedirs(model_out_dir)
 
     optimizer.zero_grad()
 
@@ -175,7 +187,7 @@ def train_func(config: dict):
         print(f"Starting epoch {epoch+1}...")
         rec.train()
 
-        batch_iter = dataloader.prepare_batches(ratings_train, movies_dataset, batch_size, device=f"cuda:{rank_global}")
+        batch_iter = dataloader.prepare_batches(ratings_train, movies_dataset, batch_size, device=rank_global)
         i = 0
         while True:
             batch = next(batch_iter)
@@ -220,7 +232,7 @@ def train_func(config: dict):
 
         print(f"Running validation for epoch {epoch+1}...")
         rec.eval()
-        batch_iter_val = dataloader.prepare_batches(ratings_val, movies_dataset, batch_size, device=f"cuda:{rank_global}")
+        batch_iter_val = dataloader.prepare_batches(ratings_val, movies_dataset, batch_size, device=rank_global)
         sum_loss = 0.0
         sum_rows = 0
 
@@ -256,7 +268,7 @@ def train_func(config: dict):
             i += 1
         
         vloss = sum_loss/ratings_val.shape[0]
-        vloss = torch.Tensor([vloss]).to(f"cuda:{rank_global}")
+        vloss = torch.Tensor([vloss]).to(rank_global)
 
         dist.reduce(vloss, dst=0, op=dist.ReduceOp.SUM)
 
@@ -264,6 +276,14 @@ def train_func(config: dict):
             avg_vloss = vloss.item()/world_size
             print(f"Average Validation Loss: {avg_vloss}")
             print()
+            print("Checkpointing...")
+            
+            if avg_vloss < best_vloss:
+                best_vloss = avg_vloss
+                checkpoint(rec, optimizer, os.path.join(model_out_dir, f"checkpoint-best-vloss.pth"))
+    
+    print("Saving model...")
+    checkpoint(rec, optimizer, os.path.join(model_out_dir, f"final_model.pth"))
 
 
 if __name__ == "__main__":
@@ -277,6 +297,8 @@ if __name__ == "__main__":
                         help='Maximum number of training epochs')
     parser.add_argument('--accumulate_grad_batches', type=int, default=4,
                         help='Accumulate gradients over N batches')
+    parser.add_argument('--existing_model_path', type=str, default=None,
+                        help='Use existing model')
 
     args = parser.parse_args()
 
