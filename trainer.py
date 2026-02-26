@@ -127,16 +127,16 @@ class CosineWarmupScheduler(optim.lr_scheduler._LRScheduler):
 
 def save_movie_embeddings(model:RecommenderSystem, movies_dataset:Dataset, path:str, batch_size:int=1024, movie_emb_size:int=128):
     model.eval()
-    movie_emb_mmap = np.memmap(path, dtype=np.float32, mode="w+", shape=(movies_dataset.shape[0], movie_emb_size+1))
-    movie_batch_iter = dataloader.get_unique_movies(movies_dataset, batch_size, device=0)
-    
-    i = 0
-    while True:
-        try:
-            batch = next(movie_batch_iter)
-            movie_ids, movie_descriptions, movie_genres, movie_years = batch
+    with torch.no_grad():
+        movie_emb_mmap = np.memmap(path, dtype=np.float32, mode="w+", shape=(movies_dataset.shape[0], movie_emb_size+1))
+        movie_batch_iter = dataloader.get_unique_movies(movies_dataset, batch_size, device=0)
+        
+        i = 0
+        while True:
+            try:
+                batch = next(movie_batch_iter)
+                movie_ids, movie_descriptions, movie_genres, movie_years = batch
 
-            with torch.no_grad():
                 output:torch.Tensor = \
                     model.get_movie_embeddings(
                         movie_ids, 
@@ -149,22 +149,22 @@ def save_movie_embeddings(model:RecommenderSystem, movies_dataset:Dataset, path:
                 movie_emb_mmap[i:i+output.shape[0], 1:] = output.cpu().numpy()
                 i += output.shape[0]
 
-        except StopIteration:
-            break
+            except StopIteration:
+                break
 
 
 def save_users_embeddings(model:RecommenderSystem, ratings_dataset:pd.DataFrame, path:str, batch_size:int=1024, users_emb_size:int=128):
     model.eval()
-    n = ratings_dataset['userId'].nunique()
-    users_emb_mmap = np.memmap(path, dtype=np.float32, mode="w+", shape=(n, users_emb_size+1))
-    users_batch_iter = dataloader.get_unique_users(ratings_dataset, batch_size, device=0)
-    
-    i = 0
-    while True:
-        try:
-            user_ids = next(users_batch_iter)
+    with torch.no_grad():
+        n = ratings_dataset['userId'].nunique()
+        users_emb_mmap = np.memmap(path, dtype=np.float32, mode="w+", shape=(n, users_emb_size+1))
+        users_batch_iter = dataloader.get_unique_users(ratings_dataset, batch_size, device=0)
+        
+        i = 0
+        while True:
+            try:
+                user_ids = next(users_batch_iter)
 
-            with torch.no_grad():
                 output:torch.Tensor = \
                     model.get_user_embeddings(
                         user_ids
@@ -174,8 +174,8 @@ def save_users_embeddings(model:RecommenderSystem, ratings_dataset:pd.DataFrame,
                 users_emb_mmap[i:i+output.shape[0], 1:] = output.cpu().numpy()
                 i += output.shape[0]
 
-        except StopIteration:
-            break
+            except StopIteration:
+                break
     
     
 def train_func(config: dict):
