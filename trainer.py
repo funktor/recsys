@@ -409,4 +409,4 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     train_func(vars(args))
-    # torchrun --standalone --nproc_per_node=8 trainer.py --gcs_dir "gs://r6-ae-dev-adperf-adintelligence-data/amondal/parquet_dataset_ml_32m" --batch_size 128 --num_epochs 1 --accumulate_grad_batches 4 --max_num_batches 50
+    # torchrun --standalone --nproc_per_node=8 trainer.py --gcs_dir "gs://r6-ae-dev-adperf-adintelligence-data/amondal/parquet_dataset_ml_32m" --batch_size 128 --num_epochs 10 --accumulate_grad_batches 4
