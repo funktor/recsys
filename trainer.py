@@ -126,6 +126,7 @@ class CosineWarmupScheduler(optim.lr_scheduler._LRScheduler):
     
 
 def save_movie_embeddings(model:RecommenderSystem, movies_dataset:Dataset, path:str, batch_size:int=1024, movie_emb_size:int=128):
+    model.eval()
     movie_emb_mmap = np.memmap(path, dtype=np.float32, mode="w+", shape=(movies_dataset.shape[0], movie_emb_size+1))
     movie_batch_iter = dataloader.get_unique_movies(movies_dataset, batch_size, device=0)
     
@@ -153,6 +154,7 @@ def save_movie_embeddings(model:RecommenderSystem, movies_dataset:Dataset, path:
 
 
 def save_users_embeddings(model:RecommenderSystem, ratings_dataset:pd.DataFrame, path:str, batch_size:int=1024, users_emb_size:int=128):
+    model.eval()
     n = ratings_dataset['userId'].nunique()
     users_emb_mmap = np.memmap(path, dtype=np.float32, mode="w+", shape=(n, users_emb_size+1))
     users_batch_iter = dataloader.get_unique_users(ratings_dataset, batch_size, device=0)
@@ -320,7 +322,11 @@ def train_func(config: dict):
                             movie_years
                         )
                 
+                    output = output.detach()
+                    
                     batch_loss:torch.Tensor = criterion(output.contiguous(), labels.contiguous())
+                    batch_loss = batch_loss.detach()
+
                     sum_loss += output.shape[0]*batch_loss.item()
                     sum_rows += output.shape[0]
 
