@@ -151,7 +151,7 @@ def save_movie_embeddings(model:RecommenderSystem, movies_dataset:Dataset, path:
             break
 
 
-def save_users_embeddings(model:RecommenderSystem, ratings_dataset:Dataset, path:str, batch_size:int=1024, users_emb_size:int=128):
+def save_users_embeddings(model:RecommenderSystem, ratings_dataset:pd.DataFrame, path:str, batch_size:int=1024, users_emb_size:int=128):
     n = ratings_dataset['userId'].nunique()
     users_emb_mmap = np.memmap(path, dtype=np.float32, mode="w+", shape=(n, users_emb_size+1))
     users_batch_iter = dataloader.get_unique_users(ratings_dataset, batch_size, device=0)
@@ -369,7 +369,7 @@ def train_func(config: dict):
         os.makedirs(cache_dir_full_train, exist_ok=True)
         ratings_train_full = datasets.load_dataset("parquet", data_files=all_files, split="train", cache_dir=cache_dir_full_train)
         ratings_train_full = ratings_train_full.select_columns("userId")
-        ratings_train_full.set_format("pandas")
+        ratings_train_full = ratings_train_full.to_pandas()
 
         print("Saving users embeddings...")
         os.makedirs("users_embeddings", exist_ok=True)
