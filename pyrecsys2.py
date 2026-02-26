@@ -148,8 +148,13 @@ def fit_vocabulary(df_ratings:pd.DataFrame, df_movies:pd.DataFrame):
         print(col)
         df_movies[col], v = categorical_encoding(df_movies, col, max_vocab_size[col])
         vocabulary[col] = v
+
+    for col in ['movieId']:
+        print(col)
+        df_movies[col] = df_movies[col].apply(lambda x: transform(x, vocabulary[col]))
     
     return vocabulary, df_ratings, df_movies
+
 
 def score_vocabulary(df_ratings:pd.DataFrame, vocabulary:dict):
     df_ratings = df_ratings.reset_index()
