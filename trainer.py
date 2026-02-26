@@ -211,10 +211,6 @@ def train_func(config: dict):
     print(f"Rank={rank_global}: Val data size     = {ratings_val.shape[0]}")
     print(f"Rank={rank_global}: Batches per epoch = {batches_per_epoch}")
 
-    print("Downloading vocabulary...")
-    if rank_local == 0:
-        Path('/tmp/marker_file.txt').unlink(missing_ok=True)
-
     if rank_local == 0:
         dataloader.download_vocabulary(path_vocab, "/tmp/vocabulary.pkl")
         Path('/tmp/marker_file.txt').touch()
