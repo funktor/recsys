@@ -177,81 +177,135 @@ def save_users_embeddings(model:RecommenderSystem, ratings_dataset:pd.DataFrame,
     
     
 def train_func(config: dict):
-    try:
-        print("Setting up DDP...")
-        if dist.is_initialized() is False:
-            ddp_setup()
+    # try:
+    print("Setting up DDP...")
+    if dist.is_initialized() is False:
+        ddp_setup()
 
-        rank_local  = int(os.environ["LOCAL_RANK"])
-        rank_global = int(os.environ["RANK"])
-        world_size  = int(os.environ["WORLD_SIZE"])
+    rank_local  = int(os.environ["LOCAL_RANK"])
+    rank_global = int(os.environ["RANK"])
+    world_size  = int(os.environ["WORLD_SIZE"])
 
-        print(f"WORLD SIZE = {world_size}")
+    print(f"WORLD SIZE = {world_size}")
 
-        datasets_gcs_path = config["gcs_dir"]
-        ratings_train_path = f"{datasets_gcs_path}/train/*.parquet"
-        path_vocab = f"{datasets_gcs_path}/vocabulary.pkl"
-        batch_size = config["batch_size"]
-        max_num_epochs = config["num_epochs"]
-        accumulate_grad_batches = config["accumulate_grad_batches"]
-        model_path = config["existing_model_path"]
-        max_num_batches = config["max_num_batches"]
+    datasets_gcs_path = config["gcs_dir"]
+    ratings_train_path = f"{datasets_gcs_path}/train/*.parquet"
+    path_vocab = f"{datasets_gcs_path}/vocabulary.pkl"
+    batch_size = config["batch_size"]
+    max_num_epochs = config["num_epochs"]
+    accumulate_grad_batches = config["accumulate_grad_batches"]
+    model_path = config["existing_model_path"]
+    max_num_batches = config["max_num_batches"]
 
-        print("Getting datasets...")
-        ratings_train, ratings_val, movies_dataset = dataloader.get_datasets(datasets_gcs_path, world_size, rank_global)
+    print("Getting datasets...")
+    ratings_train, ratings_val, movies_dataset = dataloader.get_datasets(datasets_gcs_path, world_size, rank_global)
 
-        num_train_data = count_rows_in_gcs_parquet(ratings_train_path)
-        print(f"Total Training Data = {num_train_data}")
-        print(f"Effective number of batches = {world_size*batch_size}")
+    num_train_data = count_rows_in_gcs_parquet(ratings_train_path)
+    print(f"Total Training Data = {num_train_data}")
+    print(f"Effective number of batches = {world_size*batch_size}")
 
-        batches_per_epoch = num_train_data // (world_size*batch_size)
-        batches_per_epoch = min(batches_per_epoch, max_num_batches)
+    batches_per_epoch = num_train_data // (world_size*batch_size)
+    batches_per_epoch = min(batches_per_epoch, max_num_batches)
 
-        print(f"Rank={rank_global}: Train data size   = {ratings_train.shape[0]}")
-        print(f"Rank={rank_global}: Val data size     = {ratings_val.shape[0]}")
-        print(f"Rank={rank_global}: Batches per epoch = {batches_per_epoch}")
+    print(f"Rank={rank_global}: Train data size   = {ratings_train.shape[0]}")
+    print(f"Rank={rank_global}: Val data size     = {ratings_val.shape[0]}")
+    print(f"Rank={rank_global}: Batches per epoch = {batches_per_epoch}")
 
-        print("Downloading vocabulary...")
-        if rank_local == 0:
-            dataloader.download_vocabulary(path_vocab, "/tmp/vocabulary.pkl")
-            Path('/tmp/marker_file.txt').touch()
-        else:
-            while True:
-                if os.path.exists('/tmp/marker_file.txt'):
-                    break
+    print("Downloading vocabulary...")
+    if rank_local == 0:
+        dataloader.download_vocabulary(path_vocab, "/tmp/vocabulary.pkl")
+        Path('/tmp/marker_file.txt').touch()
+    else:
+        while True:
+            if os.path.exists('/tmp/marker_file.txt'):
+                break
 
-        print("Reading vocabulary...")
-        vocabulary = dataloader.get_vocabulary("/tmp/vocabulary.pkl")
+    print("Reading vocabulary...")
+    vocabulary = dataloader.get_vocabulary("/tmp/vocabulary.pkl")
 
-        print("Getting model and optimizer...")
-        rec, optimizer = get_trainer_and_optimizer(vocabulary, rank_global)
+    print("Getting model and optimizer...")
+    rec, optimizer = get_trainer_and_optimizer(vocabulary, rank_global)
 
-        if model_path and os.path.exists(model_path):
-            rec_st, optimizer_st = load_model(model_path)
-            rec.load_state_dict(rec_st)
-            optimizer.load_state_dict(optimizer_st)
-        
-        rec = DDP(rec, device_ids=[rank_global], find_unused_parameters=True)
-        best_vloss = float("Inf")
+    if model_path and os.path.exists(model_path):
+        rec_st, optimizer_st = load_model(model_path)
+        rec.load_state_dict(rec_st)
+        optimizer.load_state_dict(optimizer_st)
+    
+    rec = DDP(rec, device_ids=[rank_global], find_unused_parameters=True)
+    best_vloss = float("Inf")
 
-        if rank_local == 0:
-            model_out_dir = "/tmp/model_outputs"
-            os.makedirs(model_out_dir, exist_ok=True)
+    if rank_local == 0:
+        model_out_dir = "/tmp/model_outputs"
+        os.makedirs(model_out_dir, exist_ok=True)
 
-        optimizer.zero_grad()
+    optimizer.zero_grad()
 
-        criterion = nn.MSELoss()
-        scheduler = CosineWarmupScheduler(optimizer, warmup=50, max_iters=batches_per_epoch*max_num_epochs/accumulate_grad_batches)
+    criterion = nn.MSELoss()
+    scheduler = CosineWarmupScheduler(optimizer, warmup=50, max_iters=batches_per_epoch*max_num_epochs/accumulate_grad_batches)
 
-        for epoch in range(max_num_epochs):
-            print(f"Starting epoch {epoch+1}...")
-            rec.train()
+    for epoch in range(max_num_epochs):
+        print(f"Starting epoch {epoch+1}...")
+        rec.train()
 
-            batch_iter = dataloader.prepare_batches_prefetch(ratings_train, movies_dataset, batch_size, device=rank_global)
+        batch_iter = dataloader.prepare_batches_prefetch(ratings_train, movies_dataset, batch_size, device=rank_global)
+        i = 0
+        while True:
+            try:
+                batch = next(batch_iter)
+
+                data, labels = batch
+                user_ids, user_prev_rated_movie_ids, user_prev_ratings, movie_ids, movie_descriptions, movie_genres, movie_years = data
+
+                output:torch.Tensor = \
+                    rec(
+                        user_ids,
+                        user_prev_rated_movie_ids, 
+                        user_prev_ratings,
+                        movie_ids, 
+                        movie_descriptions, 
+                        movie_genres, 
+                        movie_years
+                    )
+                
+                batch_loss:torch.Tensor = criterion(output.contiguous(), labels.contiguous())
+                batch_loss /= accumulate_grad_batches
+                batch_loss.backward()
+
+                if (i+1) % accumulate_grad_batches == 0:
+                    dist.reduce(batch_loss, dst=0, op=dist.ReduceOp.SUM)
+
+                    if rank_global == 0:
+                        avg_loss = batch_loss.item()/world_size
+                        print(f"Epoch: {epoch+1}, Batch: {i+1}, Average Loss: {avg_loss}")
+
+                    nn.utils.clip_grad_norm_(rec.parameters(), max_norm=1.0)
+                    optimizer.step()
+                    scheduler.step()
+                    optimizer.zero_grad()
+
+            except StopIteration:
+                break
+
+            i += 1
+
+            if i >= batches_per_epoch:
+                break
+
+        torch.cuda.empty_cache()
+        gc.collect()
+
+        print(f"Running validation for epoch {epoch+1}...")
+        rec.eval()
+
+        with torch.no_grad():
+            batch_iter_val = dataloader.prepare_batches_prefetch(ratings_val, movies_dataset, batch_size, device=rank_global)
+            sum_loss = 0.0
+            sum_rows = 0
+
             i = 0
             while True:
                 try:
-                    batch = next(batch_iter)
+                    batch = next(batch_iter_val)
 
                     data, labels = batch
                     user_ids, user_prev_rated_movie_ids, user_prev_ratings, movie_ids, movie_descriptions, movie_genres, movie_years = data
@@ -266,133 +320,79 @@ def train_func(config: dict):
                             movie_genres, 
                             movie_years
                         )
-                    
+                
                     batch_loss:torch.Tensor = criterion(output.contiguous(), labels.contiguous())
-                    batch_loss /= accumulate_grad_batches
-                    batch_loss.backward()
+                    sum_loss += output.shape[0]*batch_loss.item()
+                    sum_rows += output.shape[0]
 
-                    if (i+1) % accumulate_grad_batches == 0:
-                        dist.reduce(batch_loss, dst=0, op=dist.ReduceOp.SUM)
-
-                        if rank_global == 0:
-                            avg_loss = batch_loss.item()/world_size
-                            print(f"Epoch: {epoch+1}, Batch: {i+1}, Average Loss: {avg_loss}")
-
-                        nn.utils.clip_grad_norm_(rec.parameters(), max_norm=1.0)
-                        optimizer.step()
-                        scheduler.step()
-                        optimizer.zero_grad()
+                    if rank_global == 0:
+                        print(f"Epoch: {epoch+1}, Batch: {i+1}, Loss (Rank 0): {sum_loss/sum_rows}")
 
                 except StopIteration:
                     break
 
                 i += 1
 
-                if i >= batches_per_epoch:
+                if i >= max_num_batches:
                     break
-
-            torch.cuda.empty_cache()
-            gc.collect()
-
-            print(f"Running validation for epoch {epoch+1}...")
-            rec.eval()
-
-            with torch.no_grad():
-                batch_iter_val = dataloader.prepare_batches_prefetch(ratings_val, movies_dataset, batch_size, device=rank_global)
-                sum_loss = 0.0
-                sum_rows = 0
-
-                i = 0
-                while True:
-                    try:
-                        batch = next(batch_iter_val)
-
-                        data, labels = batch
-                        user_ids, user_prev_rated_movie_ids, user_prev_ratings, movie_ids, movie_descriptions, movie_genres, movie_years = data
-
-                        output:torch.Tensor = \
-                            rec(
-                                user_ids,
-                                user_prev_rated_movie_ids, 
-                                user_prev_ratings,
-                                movie_ids, 
-                                movie_descriptions, 
-                                movie_genres, 
-                                movie_years
-                            )
-                    
-                        batch_loss:torch.Tensor = criterion(output.contiguous(), labels.contiguous())
-                        sum_loss += output.shape[0]*batch_loss.item()
-                        sum_rows += output.shape[0]
-
-                        if rank_global == 0:
-                            print(f"Epoch: {epoch+1}, Batch: {i+1}, Loss (Rank 0): {sum_loss/sum_rows}")
-
-                    except StopIteration:
-                        break
-
-                    i += 1
-
-                    if i >= max_num_batches:
-                        break
-                
-                vloss = torch.Tensor([sum_loss, sum_rows]).to(rank_global)
-                dist.reduce(vloss, dst=0, op=dist.ReduceOp.SUM)
-
-                if rank_local == 0:
-                    vloss = vloss.tolist()
-                    avg_vloss = vloss[0]/vloss[1]
-                    print(f"Average Validation Loss: {avg_vloss}")
-                    print()
-                    print("Checkpointing...")
-                    
-                    if avg_vloss < best_vloss:
-                        best_vloss = avg_vloss
-                        checkpoint(rec.module, optimizer, os.path.join(model_out_dir, f"checkpoint-best-vloss.pth"))
-        
-        if rank_local == 0:
-            Path('/tmp/marker_file.txt').unlink(missing_ok=True)
-
-        model:RecommenderSystem = rec.module
-
-        if rank_local == 0:
-            print("Saving model...")
-            checkpoint(model, optimizer, os.path.join(model_out_dir, f"final_model.pth"))
-        
-        if rank_local == 0:
-            print("Saving movie embeddings...")
-            os.makedirs("movie_embeddings", exist_ok=True)
-            save_movie_embeddings(
-                model, 
-                movies_dataset, 
-                "movie_embeddings/embeds.mmap", 
-                batch_size=1024, 
-                movie_emb_size=model.movie_embedding_size
-            )
             
-            print("Getting all ratings train data...")
-            all_files = dataloader.pre_partitions_for_download(f"{datasets_gcs_path}/train", 1, 0)
-            cache_dir_full_train = f"/tmp/huggingface/{rank_local}/full_train"
-            os.makedirs(cache_dir_full_train, exist_ok=True)
-            ratings_train_full = datasets.load_dataset("parquet", data_files=all_files, split="train", cache_dir=cache_dir_full_train)
-            ratings_train_full = ratings_train_full.select_columns("userId")
-            ratings_train_full = ratings_train_full.to_pandas()
+            vloss = torch.Tensor([sum_loss, sum_rows]).to(rank_global)
+            dist.reduce(vloss, dst=0, op=dist.ReduceOp.SUM)
 
-            print("Saving users embeddings...")
-            os.makedirs("users_embeddings", exist_ok=True)
-            save_users_embeddings(
-                model, 
-                ratings_train_full, 
-                "users_embeddings/embeds.mmap", 
-                batch_size=1024, 
-                users_emb_size=model.user_embedding_size
-            )
-    except Exception as e:
-        print(e)
-    finally:
-        if dist.is_initialized():
-            dist.barrier()
-            dist.destroy_process_group()
+            if rank_local == 0:
+                vloss = vloss.tolist()
+                avg_vloss = vloss[0]/vloss[1]
+                print(f"Average Validation Loss: {avg_vloss}")
+                print()
+                print("Checkpointing...")
+                
+                if avg_vloss < best_vloss:
+                    best_vloss = avg_vloss
+                    checkpoint(rec.module, optimizer, os.path.join(model_out_dir, f"checkpoint-best-vloss.pth"))
+    
+    if rank_local == 0:
+        Path('/tmp/marker_file.txt').unlink(missing_ok=True)
+
+    model:RecommenderSystem = rec.module
+
+    if rank_local == 0:
+        print("Saving model...")
+        checkpoint(model, optimizer, os.path.join(model_out_dir, f"final_model.pth"))
+    
+    if rank_local == 0:
+        print("Saving movie embeddings...")
+        os.makedirs("movie_embeddings", exist_ok=True)
+        save_movie_embeddings(
+            model, 
+            movies_dataset, 
+            "movie_embeddings/embeds.mmap", 
+            batch_size=1024, 
+            movie_emb_size=model.movie_embedding_size
+        )
+        
+        print("Getting all ratings train data...")
+        all_files = dataloader.pre_partitions_for_download(f"{datasets_gcs_path}/train", 1, 0)
+        cache_dir_full_train = f"/tmp/huggingface/{rank_local}/full_train"
+        os.makedirs(cache_dir_full_train, exist_ok=True)
+        ratings_train_full = datasets.load_dataset("parquet", data_files=all_files, split="train", cache_dir=cache_dir_full_train)
+        ratings_train_full = ratings_train_full.select_columns("userId")
+        ratings_train_full = ratings_train_full.to_pandas()
+
+        print("Saving users embeddings...")
+        os.makedirs("users_embeddings", exist_ok=True)
+        save_users_embeddings(
+            model, 
+            ratings_train_full, 
+            "users_embeddings/embeds.mmap", 
+            batch_size=1024, 
+            users_emb_size=model.user_embedding_size
+        )
+    # except Exception as e:
+    #     print(e)
+    # finally:
+    #     if dist.is_initialized():
+    #         dist.barrier()
+    #         dist.destroy_process_group()
 
 
 if __name__ == "__main__":
