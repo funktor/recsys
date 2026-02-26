@@ -266,7 +266,7 @@ def train_func(config: dict):
                         movie_descriptions, 
                         movie_genres, 
                         movie_years
-                    ).detach()
+                    )
                 
                 batch_loss:torch.Tensor = criterion(output.contiguous(), labels.contiguous())
                 batch_loss /= accumulate_grad_batches
