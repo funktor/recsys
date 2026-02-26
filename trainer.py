@@ -126,7 +126,7 @@ class CosineWarmupScheduler(optim.lr_scheduler._LRScheduler):
 
 def save_movie_embeddings(model:RecommenderSystem, movies_dataset:Dataset, path:str, batch_size:int=1024, movie_emb_size:int=128):
     movie_emb_mmap = np.memmap(path, dtype=np.float32, mode="w+", shape=(movies_dataset.shape[0], movie_emb_size))
-    movie_batch_iter = dataloader.get_unique_movies(movies_dataset, batch_size, device=0)
+    movie_batch_iter = dataloader.get_unique_movies(movies_dataset, batch_size, device='cpu')
     
     i = 0
     while True:
@@ -143,12 +143,7 @@ def save_movie_embeddings(model:RecommenderSystem, movies_dataset:Dataset, path:
                         movie_years
                     )
                 
-                print(output.shape[0])
-                print(i, i+output.shape[0])
-                print(movies_dataset.shape[0])
-                print(output.cpu().numpy().shape)
-                
-                movie_emb_mmap[i:i+output.shape[0], :] = output.cpu().numpy()
+                movie_emb_mmap[i:i+output.shape[0], :] = output.numpy()
                 i += output.shape[0]
 
         except StopIteration:
@@ -359,7 +354,7 @@ def train_func(config: dict):
         print("Saving movie embeddings...")
         os.makedirs("movie_embeddings", exist_ok=True)
         save_movie_embeddings(
-            model, 
+            model.to('cpu'), 
             movies_dataset, 
             "movie_embeddings/embeds.mmap", 
             batch_size=1024, 
