@@ -271,7 +271,9 @@ def train_func(config: dict):
                 batch_loss.backward()
 
                 if (i+1) % accumulate_grad_batches == 0:
-                    print(f"Epoch: {epoch+1}, Batch: {i+1}, Average Loss: {batch_loss.item()}")
+                    if rank_global == 0:
+                        print(f"Epoch: {epoch+1}, Batch: {i+1}, Average Loss: {batch_loss.item()}")
+                        
                     # dist.reduce(batch_loss, dst=0, op=dist.ReduceOp.SUM)
 
                     # if rank_global == 0:
