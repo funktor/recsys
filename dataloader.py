@@ -142,20 +142,19 @@ def fill_prefetch_queue(queue:deque, batch_iter, stream, device):
         queue.append((data_gpu, labels_gpu))
 
 def prepare_batches_prefetch(ratings_dataset:Dataset, movies_dataset:pd.DataFrame, batch_size=128, device="gpu", prefetch_factor:int=16):
-    with torch.no_grad():
-        stream = torch.cuda.Stream()
-        batch_iter = prepare_batches(ratings_dataset, movies_dataset, batch_size, device)
-        queue = deque()
+    stream = torch.cuda.Stream()
+    batch_iter = prepare_batches(ratings_dataset, movies_dataset, batch_size, device)
+    queue = deque()
 
-        for _ in range(prefetch_factor):
-            fill_prefetch_queue(queue, batch_iter, stream, device)
-        
-        while len(queue) > 0:
-            batch = queue.popleft()
-            data, labels = batch
-            torch.cuda.current_stream().wait_stream(stream)
-            fill_prefetch_queue(queue, batch_iter, stream, device)
-            yield data, labels
+    for _ in range(prefetch_factor):
+        fill_prefetch_queue(queue, batch_iter, stream, device)
+    
+    while len(queue) > 0:
+        batch = queue.popleft()
+        data, labels = batch
+        torch.cuda.current_stream().wait_stream(stream)
+        fill_prefetch_queue(queue, batch_iter, stream, device)
+        yield data, labels
 
 
 def get_unique_movies(movies_dataset:pd.DataFrame, batch_size=128, device="gpu"):
