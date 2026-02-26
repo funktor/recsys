@@ -226,8 +226,9 @@ def train_func(config: dict):
         rec, optimizer = get_trainer_and_optimizer(vocabulary, rank_global)
 
         if model_path and os.path.exists(model_path):
-            rec_st, optimizer = load_model(model_path)
+            rec_st, optimizer_st = load_model(model_path)
             rec.load_state_dict(rec_st)
+            optimizer.load_state_dict(optimizer_st)
         
         rec = DDP(rec, device_ids=[rank_global], find_unused_parameters=True)
         best_vloss = float("Inf")
