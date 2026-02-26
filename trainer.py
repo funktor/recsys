@@ -144,7 +144,9 @@ def save_movie_embeddings(model:RecommenderSystem, movies_dataset:Dataset, path:
                     )
                 
                 print(output.shape[0])
-                print(output.cpu().numpy())
+                print(i, i+output.shape[0])
+                print(movies_dataset.shape[0])
+                print(output.cpu().numpy().shape)
                 
                 movie_emb_mmap[i:i+output.shape[0], :] = output.cpu().numpy()
                 i += output.shape[0]
