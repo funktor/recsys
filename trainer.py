@@ -124,10 +124,9 @@ class CosineWarmupScheduler(optim.lr_scheduler._LRScheduler):
         return lr_factor
     
 
-def save_movie_embeddings(model:DDP, movies_dataset:Dataset, path:str, batch_size:int=1024, movie_emb_size:int=128):
+def save_movie_embeddings(model:RecommenderSystem, movies_dataset:Dataset, path:str, batch_size:int=1024, movie_emb_size:int=128):
     movie_emb_mmap = np.memmap(path, dtype=np.float32, mode="w+", shape=(movies_dataset.shape[0], movie_emb_size))
     movie_batch_iter = dataloader.get_unique_movies(movies_dataset, batch_size, device=0)
-    model:RecommenderSystem = model.module
     
     i = 0
     while True:
@@ -151,11 +150,10 @@ def save_movie_embeddings(model:DDP, movies_dataset:Dataset, path:str, batch_siz
             break
 
 
-def save_users_embeddings(model:DDP, ratings_dataset:Dataset, path:str, batch_size:int=1024, users_emb_size:int=128):
+def save_users_embeddings(model:RecommenderSystem, ratings_dataset:Dataset, path:str, batch_size:int=1024, users_emb_size:int=128):
     n = ratings_dataset['userId'].nunique()
     users_emb_mmap = np.memmap(path, dtype=np.float32, mode="w+", shape=(n, users_emb_size))
     users_batch_iter = dataloader.get_unique_users(ratings_dataset, batch_size, device=0)
-    model:RecommenderSystem = model.module
     
     i = 0
     while True:
@@ -317,7 +315,7 @@ def train_func(config: dict):
                         )
                 
                     batch_loss:torch.Tensor = criterion(output.contiguous(), labels.contiguous())
-                    sum_loss += output.shape[0]*batch_loss.item()
+                    sum_loss += batch_loss.item()
                     sum_rows += output.shape[0]
 
                     if rank_global == 0:
