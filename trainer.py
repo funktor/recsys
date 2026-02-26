@@ -271,14 +271,11 @@ def train_func(config: dict):
                 batch_loss.backward()
 
                 if (i+1) % accumulate_grad_batches == 0:
-                    if rank_global == 0:
-                        print(f"Epoch: {epoch+1}, Batch: {i+1}, Average Loss: {batch_loss.item()}")
-                        
-                    # dist.reduce(batch_loss, dst=0, op=dist.ReduceOp.SUM)
+                    dist.reduce(batch_loss, dst=0, op=dist.ReduceOp.SUM)
 
-                    # if rank_global == 0:
-                    #     avg_loss = batch_loss.item()/world_size
-                    #     print(f"Epoch: {epoch+1}, Batch: {i+1}, Average Loss: {avg_loss}")
+                    if rank_global == 0:
+                        avg_loss = batch_loss.item()/world_size
+                        print(f"Epoch: {epoch+1}, Batch: {i+1}, Average Loss: {avg_loss}")
 
                     nn.utils.clip_grad_norm_(rec.parameters(), max_norm=1.0)
                     optimizer.step()
