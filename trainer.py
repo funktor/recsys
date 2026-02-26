@@ -134,6 +134,8 @@ def save_movie_embeddings(model:RecommenderSystem, movies_dataset:Dataset, path:
             batch = next(movie_batch_iter)
             movie_ids, movie_descriptions, movie_genres, movie_years = batch
 
+            print(movie_ids.tolist())
+
             with torch.no_grad():
                 output:torch.Tensor = \
                     model.get_movie_embeddings(
@@ -341,6 +343,9 @@ def train_func(config: dict):
                 best_vloss = avg_vloss
                 checkpoint(rec.module, optimizer, os.path.join(model_out_dir, f"checkpoint-best-vloss.pth"))
     
+    if rank_local == 0:
+        Path('/tmp/marker_file.txt').unlink(missing_ok=True)
+
     model:RecommenderSystem = rec.module
 
     if rank_local == 0:
@@ -354,7 +359,7 @@ def train_func(config: dict):
             model.to('cpu'), 
             movies_dataset, 
             "movie_embeddings/embeds.mmap", 
-            batch_size=1024, 
+            batch_size=10, 
             movie_emb_size=model.movie_embedding_size
         )
         
