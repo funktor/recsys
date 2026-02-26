@@ -108,16 +108,16 @@ def prepare_batches(ratings_dataset:Dataset, movies_dataset:pd.DataFrame, batch_
         movie_genres = pad_batch(df_ratings_batch_df["genres"].to_numpy(), dtype=np.int32)
         movie_years = df_ratings_batch_df["movie_year"].to_numpy(dtype=np.int32)
 
-        user_ids = torch.from_numpy(user_ids).pin_memory(device=device).to(device=device, non_blocking=True)
-        user_prev_rated_movie_ids = torch.from_numpy(user_prev_rated_movie_ids).pin_memory(device=device).to(device=device, non_blocking=True)
-        user_prev_ratings = torch.from_numpy(user_prev_ratings).pin_memory(device=device).to(device=device, non_blocking=True)
+        user_ids = torch.from_numpy(user_ids).pin_memory(device=device)
+        user_prev_rated_movie_ids = torch.from_numpy(user_prev_rated_movie_ids).pin_memory(device=device)
+        user_prev_ratings = torch.from_numpy(user_prev_ratings).pin_memory(device=device)
 
-        movie_ids = torch.from_numpy(movie_ids).pin_memory(device=device).to(device=device, non_blocking=True)
-        movie_descriptions = torch.from_numpy(movie_descriptions).pin_memory(device=device).to(device=device, non_blocking=True)
-        movie_genres = torch.from_numpy(movie_genres).pin_memory(device=device).to(device=device, non_blocking=True)
-        movie_years = torch.from_numpy(movie_years).pin_memory(device=device).to(device=device, non_blocking=True)
+        movie_ids = torch.from_numpy(movie_ids).pin_memory(device=device)
+        movie_descriptions = torch.from_numpy(movie_descriptions).pin_memory(device=device)
+        movie_genres = torch.from_numpy(movie_genres).pin_memory(device=device)
+        movie_years = torch.from_numpy(movie_years).pin_memory(device=device)
 
-        labels = torch.from_numpy(df_ratings_batch_df["normalized_rating"].to_numpy(dtype=np.float32)).pin_memory(device=device).to(device=device, non_blocking=True)
+        labels = torch.from_numpy(df_ratings_batch_df["normalized_rating"].to_numpy(dtype=np.float32)).pin_memory(device=device)
 
         yield [user_ids, user_prev_rated_movie_ids, user_prev_ratings, movie_ids, movie_descriptions, movie_genres, movie_years], labels
 
@@ -125,10 +125,24 @@ def prepare_batches(ratings_dataset:Dataset, movies_dataset:pd.DataFrame, batch_
 def fill_prefetch_queue(queue:deque, batch_iter, stream, device):
     try:
         data, labels = next(batch_iter)
-        queue.append((data, labels))
     except StopIteration:
         queue.append(None)
         return
+    
+    with torch.cuda.stream(stream):
+        data_gpu = []
+        for obj in data:
+            if isinstance(obj, torch.Tensor):
+                data_gpu += [obj.to(device=device, non_blocking=True)]
+
+        if isinstance(labels, torch.Tensor):
+            labels_gpu = labels.to(device=device, non_blocking=True)
+        
+        for obj in data_gpu:
+            obj.record_stream(stream)
+        
+        labels_gpu.record_stream(stream)
+        queue.append((data_gpu, labels_gpu))
 
 def prepare_batches_prefetch(ratings_dataset:Dataset, movies_dataset:pd.DataFrame, batch_size=128, device="gpu", prefetch_factor:int=4):
     stream = torch.cuda.Stream()
