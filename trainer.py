@@ -364,9 +364,10 @@ def train_func(config: dict):
         )
         
         print("Getting all ratings train data...")
+        all_files = dataloader.pre_partitions_for_download(f"{datasets_gcs_path}/train", 1, 0)
         cache_dir_full_train = f"/tmp/huggingface/{rank_local}/full_train"
         os.makedirs(cache_dir_full_train, exist_ok=True)
-        ratings_train_full = datasets.load_dataset("parquet", data_files=ratings_train_path, split="train", cache_dir=cache_dir_full_train)
+        ratings_train_full = datasets.load_dataset("parquet", data_files=all_files, split="train", cache_dir=cache_dir_full_train)
         ratings_train_full = ratings_train_full.select_columns("userId")
         ratings_train_full.set_format("pandas")
 
