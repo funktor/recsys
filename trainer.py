@@ -143,7 +143,7 @@ def save_movie_embeddings(model:RecommenderSystem, movies_dataset:Dataset, path:
                         movie_years
                     )
                 
-                movie_emb_mmap[i:i+output.shape[0]] = output.numpy()
+                movie_emb_mmap[i:i+output.shape[0]] = output.cpu().numpy()
                 i += output.shape[0]
 
         except StopIteration:
@@ -166,7 +166,7 @@ def save_users_embeddings(model:RecommenderSystem, ratings_dataset:Dataset, path
                         user_ids
                     )
                 
-                users_emb_mmap[i:i+output.shape[0]] = output.numpy()
+                users_emb_mmap[i:i+output.shape[0]] = output.cpu().numpy()
                 i += output.shape[0]
 
         except StopIteration:
