@@ -62,8 +62,9 @@ def get_datasets(path:str, world_size:int, rank_local:int):
     ratings_val = datasets.load_dataset("parquet", data_files=val_files, split="train", cache_dir=cache_dir_val)
     ratings_val.set_format("pandas")
 
-    cache_dir_val = f"/tmp/huggingface/{rank_local}/movies"
-    movies_dataset = datasets.load_dataset("parquet", data_files=f"{path}/movies.parquet", split="train", keep_in_memory=True, cache_dir=cache_dir_val)
+    cache_dir_movies = f"/tmp/huggingface/{rank_local}/movies"
+    os.makedirs(cache_dir_movies, exist_ok=True)
+    movies_dataset = datasets.load_dataset("parquet", data_files=f"{path}/movies.parquet", split="train", keep_in_memory=True, cache_dir=cache_dir_movies)
     movies_dataset = movies_dataset.to_pandas()
 
     return ratings_train, ratings_val, movies_dataset

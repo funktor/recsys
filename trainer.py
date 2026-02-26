@@ -364,7 +364,9 @@ def train_func(config: dict):
         )
         
         print("Getting all ratings train data...")
-        ratings_train_full = datasets.load_dataset("parquet", data_dir=ratings_train_path, split="train")
+        cache_dir_full_train = f"/tmp/huggingface/{rank_local}/full_train"
+        os.makedirs(cache_dir_full_train, exist_ok=True)
+        ratings_train_full = datasets.load_dataset("parquet", data_dir=f"{datasets_gcs_path}/train", split="train", cache_dir=cache_dir_full_train)
         ratings_train_full = ratings_train_full.select_columns("userId")
         ratings_train_full.set_format("pandas")
 
