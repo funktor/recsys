@@ -213,6 +213,9 @@ def train_func(config: dict):
 
     print("Downloading vocabulary...")
     if rank_local == 0:
+        Path('/tmp/marker_file.txt').unlink(missing_ok=True)
+
+    if rank_local == 0:
         dataloader.download_vocabulary(path_vocab, "/tmp/vocabulary.pkl")
         Path('/tmp/marker_file.txt').touch()
     else:
@@ -350,9 +353,6 @@ def train_func(config: dict):
                     best_vloss = avg_vloss
                     checkpoint(rec.module, optimizer, os.path.join(model_out_dir, f"checkpoint-best-vloss.pth"))
     
-    if rank_local == 0:
-        Path('/tmp/marker_file.txt').unlink(missing_ok=True)
-
     model:RecommenderSystem = rec.module
 
     if rank_local == 0:
