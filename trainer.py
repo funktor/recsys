@@ -317,7 +317,7 @@ def train_func(config: dict):
                             )
                     
                         batch_loss:torch.Tensor = criterion(output.contiguous(), labels.contiguous())
-                        sum_loss += batch_loss.item()
+                        sum_loss += output.shape[0]*batch_loss.item()
                         sum_rows += output.shape[0]
 
                         if rank_global == 0:
@@ -331,13 +331,12 @@ def train_func(config: dict):
                 if i >= max_num_batches:
                     break
             
-            vloss = sum_loss/ratings_val.shape[0]
-            vloss = torch.Tensor([vloss]).to(rank_global)
-
+            vloss = torch.Tensor([sum_loss, sum_rows]).to(rank_global)
             dist.reduce(vloss, dst=0, op=dist.ReduceOp.SUM)
 
             if rank_local == 0:
-                avg_vloss = vloss.item()/world_size
+                vloss = vloss.tolist()
+                avg_vloss = vloss[0]/vloss[1]
                 print(f"Average Validation Loss: {avg_vloss}")
                 print()
                 print("Checkpointing...")
