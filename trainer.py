@@ -210,17 +210,14 @@ def train_func(config: dict):
     print("Downloading vocabulary...")
     if rank_local == 0:
         dataloader.download_vocabulary(path_vocab, "/tmp/vocabulary.pkl")
-        Path('/tmp/marker_file.txt').touch()
+        Path('/tmp/write_marker_file.txt').touch()
     else:
         while True:
-            if os.path.exists('/tmp/marker_file.txt'):
+            if os.path.exists('/tmp/write_marker_file.txt'):
                 break
 
     print("Reading vocabulary...")
     vocabulary = dataloader.get_vocabulary("/tmp/vocabulary.pkl")
-
-    if rank_local == 0:
-        Path('/tmp/marker_file.txt').unlink(missing_ok=True)
 
     print("Getting model and optimizer...")
     if model_path and os.path.exists(model_path):
