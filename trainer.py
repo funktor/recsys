@@ -266,7 +266,7 @@ def train_func(config: dict):
                         movie_descriptions, 
                         movie_genres, 
                         movie_years
-                    )
+                    ).detach()
                 
                 batch_loss:torch.Tensor = criterion(output.contiguous(), labels.contiguous())
                 batch_loss /= accumulate_grad_batches
@@ -292,9 +292,6 @@ def train_func(config: dict):
             if i >= batches_per_epoch:
                 break
 
-        torch.cuda.empty_cache()
-        gc.collect()
-
         print(f"Running validation for epoch {epoch+1}...")
         rec.eval()
 
@@ -313,19 +310,16 @@ def train_func(config: dict):
 
                     output:torch.Tensor = \
                         rec(
-                            user_ids,
-                            user_prev_rated_movie_ids, 
-                            user_prev_ratings,
-                            movie_ids, 
-                            movie_descriptions, 
-                            movie_genres, 
-                            movie_years
-                        )
+                            user_ids.detach(),
+                            user_prev_rated_movie_ids.detach(), 
+                            user_prev_ratings.detach(),
+                            movie_ids.detach(), 
+                            movie_descriptions.detach(), 
+                            movie_genres.detach(), 
+                            movie_years.detach()
+                        ).detach()
                 
-                    output = output.detach()
-                    
-                    batch_loss:torch.Tensor = criterion(output.contiguous(), labels.contiguous())
-                    batch_loss = batch_loss.detach()
+                    batch_loss:torch.Tensor = criterion(output.contiguous(), labels.contiguous()).detach()
 
                     sum_loss += output.shape[0]*batch_loss.item()
                     sum_rows += output.shape[0]

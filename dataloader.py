@@ -108,17 +108,16 @@ def prepare_batches(ratings_dataset:Dataset, movies_dataset:pd.DataFrame, batch_
         movie_genres = pad_batch(df_ratings_batch_df["genres"].to_numpy(), dtype=np.int32)
         movie_years = df_ratings_batch_df["movie_year"].to_numpy(dtype=np.int32)
 
-        with torch.no_grad():
-            user_ids = torch.from_numpy(user_ids).pin_memory()
-            user_prev_rated_movie_ids = torch.from_numpy(user_prev_rated_movie_ids).pin_memory()
-            user_prev_ratings = torch.from_numpy(user_prev_ratings).pin_memory()
+        user_ids = torch.from_numpy(user_ids).pin_memory()
+        user_prev_rated_movie_ids = torch.from_numpy(user_prev_rated_movie_ids).pin_memory()
+        user_prev_ratings = torch.from_numpy(user_prev_ratings).pin_memory()
 
-            movie_ids = torch.from_numpy(movie_ids).pin_memory()
-            movie_descriptions = torch.from_numpy(movie_descriptions).pin_memory()
-            movie_genres = torch.from_numpy(movie_genres).pin_memory()
-            movie_years = torch.from_numpy(movie_years).pin_memory()
+        movie_ids = torch.from_numpy(movie_ids).pin_memory()
+        movie_descriptions = torch.from_numpy(movie_descriptions).pin_memory()
+        movie_genres = torch.from_numpy(movie_genres).pin_memory()
+        movie_years = torch.from_numpy(movie_years).pin_memory()
 
-            labels = torch.from_numpy(df_ratings_batch_df["normalized_rating"].to_numpy(dtype=np.float32)).pin_memory()
+        labels = torch.from_numpy(df_ratings_batch_df["normalized_rating"].to_numpy(dtype=np.float32)).pin_memory()
 
         yield [user_ids, user_prev_rated_movie_ids, user_prev_ratings, movie_ids, movie_descriptions, movie_genres, movie_years], labels
 
@@ -143,19 +142,20 @@ def fill_prefetch_queue(queue:deque, batch_iter, stream, device):
         queue.append((data_gpu, labels_gpu))
 
 def prepare_batches_prefetch(ratings_dataset:Dataset, movies_dataset:pd.DataFrame, batch_size=128, device="gpu", prefetch_factor:int=16):
-    stream = torch.cuda.Stream()
-    batch_iter = prepare_batches(ratings_dataset, movies_dataset, batch_size, device)
-    queue = deque()
+    with torch.no_grad():
+        stream = torch.cuda.Stream()
+        batch_iter = prepare_batches(ratings_dataset, movies_dataset, batch_size, device)
+        queue = deque()
 
-    for _ in range(prefetch_factor):
-        fill_prefetch_queue(queue, batch_iter, stream, device)
-    
-    while len(queue) > 0:
-        batch = queue.popleft()
-        data, labels = batch
-        torch.cuda.current_stream().wait_stream(stream)
-        fill_prefetch_queue(queue, batch_iter, stream, device)
-        yield data, labels
+        for _ in range(prefetch_factor):
+            fill_prefetch_queue(queue, batch_iter, stream, device)
+        
+        while len(queue) > 0:
+            batch = queue.popleft()
+            data, labels = batch
+            torch.cuda.current_stream().wait_stream(stream)
+            fill_prefetch_queue(queue, batch_iter, stream, device)
+            yield data, labels
 
 
 def get_unique_movies(movies_dataset:pd.DataFrame, batch_size=128, device="gpu"):
