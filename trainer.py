@@ -26,6 +26,7 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from model import RecommenderSystem
 import datasets
 from datasets import Dataset
+import gc
 
 # Ensure that all operations are deterministic on GPU (if used) for reproducibility
 torch.backends.cudnn.deterministic = True
@@ -290,21 +291,25 @@ def train_func(config: dict):
                 if i >= batches_per_epoch:
                     break
 
+            torch.cuda.empty_cache()
+            gc.collect()
+
             print(f"Running validation for epoch {epoch+1}...")
             rec.eval()
-            batch_iter_val = dataloader.prepare_batches(ratings_val, movies_dataset, batch_size, device=rank_global)
-            sum_loss = 0.0
-            sum_rows = 0
 
-            i = 0
-            while True:
-                try:
-                    batch = next(batch_iter_val)
+            with torch.no_grad():
+                batch_iter_val = dataloader.prepare_batches(ratings_val, movies_dataset, batch_size, device=rank_global)
+                sum_loss = 0.0
+                sum_rows = 0
 
-                    data, labels = batch
-                    user_ids, user_prev_rated_movie_ids, user_prev_ratings, movie_ids, movie_descriptions, movie_genres, movie_years = data
+                i = 0
+                while True:
+                    try:
+                        batch = next(batch_iter_val)
 
-                    with torch.no_grad():
+                        data, labels = batch
+                        user_ids, user_prev_rated_movie_ids, user_prev_ratings, movie_ids, movie_descriptions, movie_genres, movie_years = data
+
                         output:torch.Tensor = \
                             rec(
                                 user_ids,
@@ -323,27 +328,27 @@ def train_func(config: dict):
                         if rank_global == 0:
                             print(f"Epoch: {epoch+1}, Batch: {i+1}, Loss (Rank 0): {sum_loss/sum_rows}")
 
-                except StopIteration:
-                    break
+                    except StopIteration:
+                        break
 
-                i += 1
+                    i += 1
 
-                if i >= max_num_batches:
-                    break
-            
-            vloss = torch.Tensor([sum_loss, sum_rows]).to(rank_global)
-            dist.reduce(vloss, dst=0, op=dist.ReduceOp.SUM)
-
-            if rank_local == 0:
-                vloss = vloss.tolist()
-                avg_vloss = vloss[0]/vloss[1]
-                print(f"Average Validation Loss: {avg_vloss}")
-                print()
-                print("Checkpointing...")
+                    if i >= max_num_batches:
+                        break
                 
-                if avg_vloss < best_vloss:
-                    best_vloss = avg_vloss
-                    checkpoint(rec.module, optimizer, os.path.join(model_out_dir, f"checkpoint-best-vloss.pth"))
+                vloss = torch.Tensor([sum_loss, sum_rows]).to(rank_global)
+                dist.reduce(vloss, dst=0, op=dist.ReduceOp.SUM)
+
+                if rank_local == 0:
+                    vloss = vloss.tolist()
+                    avg_vloss = vloss[0]/vloss[1]
+                    print(f"Average Validation Loss: {avg_vloss}")
+                    print()
+                    print("Checkpointing...")
+                    
+                    if avg_vloss < best_vloss:
+                        best_vloss = avg_vloss
+                        checkpoint(rec.module, optimizer, os.path.join(model_out_dir, f"checkpoint-best-vloss.pth"))
         
         if rank_local == 0:
             Path('/tmp/marker_file.txt').unlink(missing_ok=True)

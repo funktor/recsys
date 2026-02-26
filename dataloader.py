@@ -107,16 +107,16 @@ def prepare_batches(ratings_dataset:Dataset, movies_dataset:pd.DataFrame, batch_
         movie_genres = pad_batch(df_ratings_batch_df["genres"].to_numpy(), dtype=np.int32)
         movie_years = df_ratings_batch_df["movie_year"].to_numpy(dtype=np.int32)
 
-        user_ids = torch.from_numpy(user_ids).to(device=device)
-        user_prev_rated_movie_ids = torch.from_numpy(user_prev_rated_movie_ids).to(device=device)
-        user_prev_ratings = torch.from_numpy(user_prev_ratings).to(device=device)
+        user_ids = torch.from_numpy(user_ids).pin_memory(device=device).to(device=device, non_blocking=True)
+        user_prev_rated_movie_ids = torch.from_numpy(user_prev_rated_movie_ids).pin_memory(device=device).to(device=device, non_blocking=True)
+        user_prev_ratings = torch.from_numpy(user_prev_ratings).pin_memory(device=device).to(device=device, non_blocking=True)
 
-        movie_ids = torch.from_numpy(movie_ids).to(device=device)
-        movie_descriptions = torch.from_numpy(movie_descriptions).to(device=device)
-        movie_genres = torch.from_numpy(movie_genres).to(device=device)
-        movie_years = torch.from_numpy(movie_years).to(device=device)
+        movie_ids = torch.from_numpy(movie_ids).pin_memory(device=device).to(device=device, non_blocking=True)
+        movie_descriptions = torch.from_numpy(movie_descriptions).pin_memory(device=device).to(device=device, non_blocking=True)
+        movie_genres = torch.from_numpy(movie_genres).pin_memory(device=device).to(device=device, non_blocking=True)
+        movie_years = torch.from_numpy(movie_years).pin_memory(device=device).to(device=device, non_blocking=True)
 
-        labels = torch.from_numpy(df_ratings_batch_df["normalized_rating"].to_numpy(dtype=np.float32)).to(device=device)
+        labels = torch.from_numpy(df_ratings_batch_df["normalized_rating"].to_numpy(dtype=np.float32)).pin_memory(device=device).to(device=device, non_blocking=True)
 
         yield [user_ids, user_prev_rated_movie_ids, user_prev_ratings, movie_ids, movie_descriptions, movie_genres, movie_years], labels
 
@@ -133,10 +133,10 @@ def get_unique_movies(movies_dataset:pd.DataFrame, batch_size=128, device="gpu")
         movie_genres = pad_batch(movies_dataset_batch_df["genres"].to_numpy(), dtype=np.int32)
         movie_years = movies_dataset_batch_df["movie_year"].to_numpy(dtype=np.int32)
 
-        movie_ids = torch.from_numpy(movie_ids).to(device=device)
-        movie_descriptions = torch.from_numpy(movie_descriptions).to(device=device)
-        movie_genres = torch.from_numpy(movie_genres).to(device=device)
-        movie_years = torch.from_numpy(movie_years).to(device=device)
+        movie_ids = torch.from_numpy(movie_ids).pin_memory(device=device).to(device=device, non_blocking=True)
+        movie_descriptions = torch.from_numpy(movie_descriptions).pin_memory(device=device).to(device=device, non_blocking=True)
+        movie_genres = torch.from_numpy(movie_genres).pin_memory(device=device).to(device=device, non_blocking=True)
+        movie_years = torch.from_numpy(movie_years).pin_memory(device=device).to(device=device, non_blocking=True)
 
         yield [movie_ids, movie_descriptions, movie_genres, movie_years]
 
@@ -150,7 +150,7 @@ def get_unique_users(ratings_dataset:pd.DataFrame, batch_size=128, device="gpu")
         df_ratings_batch_df = df_ratings_batch_df.reset_index()
 
         user_ids = df_ratings_batch_df["userId"].to_numpy(dtype=np.int32)
-        user_ids = torch.from_numpy(user_ids).to(device=device)
+        user_ids = torch.from_numpy(user_ids).pin_memory(device=device).to(device=device, non_blocking=True)
 
         yield user_ids
 
