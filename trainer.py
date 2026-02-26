@@ -296,7 +296,7 @@ def train_func(config: dict):
         rec.eval()
 
         with torch.no_grad():
-            batch_iter_val = dataloader.prepare_batches_prefetch(ratings_val, movies_dataset, batch_size, device=rank_global)
+            batch_iter_val = dataloader.prepare_batches_prefetch(ratings_val, movies_dataset, 32, device=rank_global)
             sum_loss = 0.0
             sum_rows = 0
 
@@ -310,16 +310,16 @@ def train_func(config: dict):
 
                     output:torch.Tensor = \
                         rec(
-                            user_ids.detach(),
-                            user_prev_rated_movie_ids.detach(), 
-                            user_prev_ratings.detach(),
-                            movie_ids.detach(), 
-                            movie_descriptions.detach(), 
-                            movie_genres.detach(), 
-                            movie_years.detach()
-                        ).detach()
+                            user_ids,
+                            user_prev_rated_movie_ids, 
+                            user_prev_ratings,
+                            movie_ids, 
+                            movie_descriptions, 
+                            movie_genres, 
+                            movie_years
+                        )
                 
-                    batch_loss:torch.Tensor = criterion(output.contiguous(), labels.contiguous()).detach()
+                    batch_loss:torch.Tensor = criterion(output.contiguous(), labels.contiguous())
 
                     sum_loss += output.shape[0]*batch_loss.item()
                     sum_rows += output.shape[0]
