@@ -223,10 +223,11 @@ def train_func(config: dict):
         vocabulary = dataloader.get_vocabulary("/tmp/vocabulary.pkl")
 
         print("Getting model and optimizer...")
+        rec, optimizer = get_trainer_and_optimizer(vocabulary, rank_global)
+
         if model_path and os.path.exists(model_path):
-            rec, optimizer = load_model(model_path)
-        else:
-            rec, optimizer = get_trainer_and_optimizer(vocabulary, rank_global)
+            rec_st, optimizer = load_model(model_path)
+            rec.load_state_dict(rec_st)
         
         rec = DDP(rec, device_ids=[rank_global], find_unused_parameters=True)
         best_vloss = float("Inf")
