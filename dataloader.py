@@ -13,6 +13,7 @@ import fsspec
 from google.cloud import storage
 import joblib
 from datasets import Dataset
+from collections import deque
 
 def pre_partitions_with_files(filepaths:List[str], world_size, rank):
     train_files = []
@@ -107,18 +108,56 @@ def prepare_batches(ratings_dataset:Dataset, movies_dataset:pd.DataFrame, batch_
         movie_genres = pad_batch(df_ratings_batch_df["genres"].to_numpy(), dtype=np.int32)
         movie_years = df_ratings_batch_df["movie_year"].to_numpy(dtype=np.int32)
 
-        user_ids = torch.from_numpy(user_ids).pin_memory(device=device).to(device=device, non_blocking=True)
-        user_prev_rated_movie_ids = torch.from_numpy(user_prev_rated_movie_ids).pin_memory(device=device).to(device=device, non_blocking=True)
-        user_prev_ratings = torch.from_numpy(user_prev_ratings).pin_memory(device=device).to(device=device, non_blocking=True)
+        user_ids = torch.from_numpy(user_ids).pin_memory(device='cpu')
+        user_prev_rated_movie_ids = torch.from_numpy(user_prev_rated_movie_ids).pin_memory(device='cpu')
+        user_prev_ratings = torch.from_numpy(user_prev_ratings).pin_memory(device='cpu')
 
-        movie_ids = torch.from_numpy(movie_ids).pin_memory(device=device).to(device=device, non_blocking=True)
-        movie_descriptions = torch.from_numpy(movie_descriptions).pin_memory(device=device).to(device=device, non_blocking=True)
-        movie_genres = torch.from_numpy(movie_genres).pin_memory(device=device).to(device=device, non_blocking=True)
-        movie_years = torch.from_numpy(movie_years).pin_memory(device=device).to(device=device, non_blocking=True)
+        movie_ids = torch.from_numpy(movie_ids).pin_memory(device='cpu')
+        movie_descriptions = torch.from_numpy(movie_descriptions).pin_memory(device='cpu')
+        movie_genres = torch.from_numpy(movie_genres).pin_memory(device='cpu')
+        movie_years = torch.from_numpy(movie_years).pin_memory(device='cpu')
 
-        labels = torch.from_numpy(df_ratings_batch_df["normalized_rating"].to_numpy(dtype=np.float32)).pin_memory(device=device).to(device=device, non_blocking=True)
+        labels = torch.from_numpy(df_ratings_batch_df["normalized_rating"].to_numpy(dtype=np.float32)).pin_memory(device='cpu')
 
         yield [user_ids, user_prev_rated_movie_ids, user_prev_ratings, movie_ids, movie_descriptions, movie_genres, movie_years], labels
+
+
+def fill_prefetch_queue(queue:deque, batch_iter, stream, device):
+    try:
+        data, labels = next(batch_iter)
+    except StopIteration:
+        queue.append(None)
+    
+    with torch.cuda.stream(stream):
+        data_gpu = []
+        for obj in data:
+            if isinstance(obj, torch.Tensor):
+                data_gpu += [obj.to(device=device, non_blocking=True)]
+                obj.record_stream(stream)
+
+        if isinstance(labels, torch.Tensor):
+            labels_gpu = labels.to(device=device, non_blocking=True)
+            labels.record_stream(stream)
+
+        queue.append((data_gpu, labels_gpu))
+
+def prepare_batches_prefetch(ratings_dataset:Dataset, movies_dataset:pd.DataFrame, batch_size=128, device="gpu", prefetch_factor:int=4):
+    stream = torch.cuda.Stream()
+    batch_iter = prepare_batches(ratings_dataset, movies_dataset, batch_size, device)
+    queue = deque()
+
+    for _ in range(prefetch_factor):
+        fill_prefetch_queue(queue, batch_iter, stream, device)
+    
+    while True:
+        batch = queue.popleft()
+        if batch is not None:
+            data, labels = batch
+            torch.cuda.current_stream().wait_stream(stream)
+            fill_prefetch_queue(queue, batch_iter, stream, device)
+            yield data, labels
+        else:
+            break
 
 
 def get_unique_movies(movies_dataset:pd.DataFrame, batch_size=128, device="gpu"):

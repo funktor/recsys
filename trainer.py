@@ -247,7 +247,7 @@ def train_func(config: dict):
             print(f"Starting epoch {epoch+1}...")
             rec.train()
 
-            batch_iter = dataloader.prepare_batches(ratings_train, movies_dataset, batch_size, device=rank_global)
+            batch_iter = dataloader.prepare_batches_prefetch(ratings_train, movies_dataset, batch_size, device=rank_global)
             i = 0
             while True:
                 try:
@@ -298,7 +298,7 @@ def train_func(config: dict):
             rec.eval()
 
             with torch.no_grad():
-                batch_iter_val = dataloader.prepare_batches(ratings_val, movies_dataset, batch_size, device=rank_global)
+                batch_iter_val = dataloader.prepare_batches_prefetch(ratings_val, movies_dataset, batch_size, device=rank_global)
                 sum_loss = 0.0
                 sum_rows = 0
 
