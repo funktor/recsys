@@ -143,6 +143,8 @@ def save_movie_embeddings(model:RecommenderSystem, movies_dataset:Dataset, path:
                         movie_years
                     )
                 
+                print(output.shape)
+                
                 movie_emb_mmap[i:i+output.shape[0], :] = output.cpu().numpy()
                 i += output.shape[0]
 
