@@ -863,4 +863,4 @@ if __name__ == '__main__':
 # pytorch distributed training (DDP) multi-gpu and multi-node
 # index movie embeddings/semantic IDS
 # 
-# custom loss, optimizer, pos encoder, transformer in C++/CUDA
+# custom loss, learning rate scheduler, optimizer, pos encoder, automatic mixed precision training, transformer + flash attention in C++/CUDA

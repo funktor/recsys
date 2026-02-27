@@ -343,7 +343,7 @@ def train_func(config: dict):
                                 movie_years
                             )
                     
-                        batch_loss:torch.Tensor = criterion(output.contiguous(), labels.contiguous())
+                        batch_loss:torch.Tensor = criterion(output.cpu().contiguous(), labels.cpu().contiguous())
 
                         sum_loss += output.shape[0]*batch_loss.item()
                         sum_rows += output.shape[0]
@@ -407,7 +407,7 @@ def train_func(config: dict):
                 batch_size=1024, 
                 users_emb_size=model.user_embedding_size
             )
-            
+
     except Exception as e:
         print(e)
     finally:
