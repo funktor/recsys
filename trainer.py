@@ -351,6 +351,10 @@ def train_func(config: dict):
                         if rank_local == 0:
                             print(f"Epoch: {epoch+1}, Batch: {i+1}, Loss (Rank 0): {sum_loss/sum_rows}")
 
+                        if (i+1) % 100:
+                            torch.cuda.empty_cache()
+                            gc.collect()
+
                     except StopIteration:
                         break
 
