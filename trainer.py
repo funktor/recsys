@@ -248,6 +248,9 @@ def train_func(config: dict):
             print(f"Starting epoch {epoch+1}...")
             rec.train()
 
+            sum_loss = 0.0
+            sum_rows = 0
+
             batch_iter = dataloader.prepare_batches_prefetch(ratings_train, movies_dataset, batch_size, device=rank_global)
             i = 0
             while True:
@@ -269,14 +272,20 @@ def train_func(config: dict):
                         )
                     
                     batch_loss:torch.Tensor = criterion(output.contiguous(), labels.contiguous())
+
+                    sum_loss += output.shape[0]*batch_loss.item()
+                    sum_rows += output.shape[0]
+
                     batch_loss /= accumulate_grad_batches
                     batch_loss.backward()
 
                     if (i+1) % accumulate_grad_batches == 0:
-                        dist.reduce(batch_loss, dst=0, op=dist.ReduceOp.SUM)
+                        acc_loss = torch.Tensor([sum_loss, sum_rows]).to(rank_global)
+                        dist.reduce(acc_loss, dst=0, op=dist.ReduceOp.SUM)
 
-                        if rank_global == 0:
-                            avg_loss = batch_loss.item()/world_size
+                        if rank_local == 0:
+                            acc_loss = acc_loss.tolist()
+                            avg_loss = acc_loss[0]/acc_loss[1]
                             print(f"Epoch: {epoch+1}, Batch: {i+1}, Average Loss: {avg_loss}")
 
                         nn.utils.clip_grad_norm_(rec.parameters(), max_norm=1.0)
@@ -291,6 +300,21 @@ def train_func(config: dict):
 
                 if i >= batches_per_epoch:
                     break
+
+
+            acc_loss = torch.Tensor([sum_loss, sum_rows]).to(rank_global)
+            dist.reduce(acc_loss, dst=0, op=dist.ReduceOp.SUM)
+
+            if rank_local == 0:
+                acc_loss = acc_loss.tolist()
+                avg_loss = acc_loss[0]/acc_loss[1]
+                print(f"Epoch: {epoch+1}, Batch: {i+1}, Average Loss: {avg_loss}")
+
+            nn.utils.clip_grad_norm_(rec.parameters(), max_norm=1.0)
+            optimizer.step()
+            scheduler.step()
+            optimizer.zero_grad()
+
 
             print(f"Running validation for epoch {epoch+1}...")
             rec.eval()
@@ -324,7 +348,7 @@ def train_func(config: dict):
                         sum_loss += output.shape[0]*batch_loss.item()
                         sum_rows += output.shape[0]
 
-                        if rank_global == 0:
+                        if rank_local == 0:
                             print(f"Epoch: {epoch+1}, Batch: {i+1}, Loss (Rank 0): {sum_loss/sum_rows}")
 
                     except StopIteration:
@@ -383,6 +407,7 @@ def train_func(config: dict):
                 batch_size=1024, 
                 users_emb_size=model.user_embedding_size
             )
+            
     except Exception as e:
         print(e)
     finally:

@@ -851,6 +851,7 @@ if __name__ == '__main__':
 # model training - adamw, cosine learning rate scheduler, accumulate grad batches, automatic mixed precision training - DONE NO MP
 # user embedding x movie embedding = 1/0 (contrastive loss training) (enh - custom cuda loss func)
 # pytorch distributed training (DDP) multi-gpu and multi-node, (torchrun, mpirun, enh - C++-MPI training) - DONE NO MPI
+# prefetch factor multi worker - pinned memory - cuda streams
 # index movie embeddings (product quantization, LSH, HNSW, KD-Tree) (enh - c++/cuda prd quant, hnsw..)
 # user embedding - Approx Nearest Neighbor Search (Top K nearest movie embeddings) (enh - c++/cuda extension)
 # scoring real time.
