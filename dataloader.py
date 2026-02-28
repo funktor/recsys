@@ -50,20 +50,20 @@ def get_vocabulary(local_path:str):
     return vocabulary
 
 
-def get_datasets(path:str, world_size:int, rank_local:int):
-    train_files = pre_partitions_for_download(f"{path}/train", world_size, rank_local)
-    cache_dir_train = f"/tmp/huggingface/{rank_local}/train"
+def get_datasets(path:str, world_size:int, rank:int):
+    train_files = pre_partitions_for_download(f"{path}/train", world_size, rank)
+    cache_dir_train = f"/tmp/huggingface/{rank}/train"
     os.makedirs(cache_dir_train, exist_ok=True)
     ratings_train = datasets.load_dataset("parquet", data_files=train_files, split="train", cache_dir=cache_dir_train)
     ratings_train.set_format("pandas")
 
-    val_files = pre_partitions_for_download(f"{path}/validation", world_size, rank_local)
-    cache_dir_val = f"/tmp/huggingface/{rank_local}/val"
+    val_files = pre_partitions_for_download(f"{path}/validation", world_size, rank)
+    cache_dir_val = f"/tmp/huggingface/{rank}/val"
     os.makedirs(cache_dir_val, exist_ok=True)
     ratings_val = datasets.load_dataset("parquet", data_files=val_files, split="train", cache_dir=cache_dir_val)
     ratings_val.set_format("pandas")
 
-    cache_dir_movies = f"/tmp/huggingface/{rank_local}/movies"
+    cache_dir_movies = f"/tmp/huggingface/{rank}/movies"
     os.makedirs(cache_dir_movies, exist_ok=True)
     movies_dataset = datasets.load_dataset("parquet", data_files=f"{path}/movies.parquet", split="train", keep_in_memory=True, cache_dir=cache_dir_movies)
     movies_dataset = movies_dataset.to_pandas()

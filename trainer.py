@@ -34,7 +34,7 @@ torch.backends.cudnn.benchmark = False
 
 def ddp_setup():
     init_process_group(backend="nccl")
-    torch.cuda.set_device(int(os.environ["RANK"]))
+    torch.cuda.set_device(int(os.environ["LOCAL_RANK"]))
 
 def checkpoint(model:nn.Module, optimizer:torch.optim.Optimizer, filename):
     torch.save({'optimizer':optimizer.state_dict(), 'model':model.state_dict()}, filename)
@@ -225,14 +225,14 @@ def train_func(config: dict):
         vocabulary = dataloader.get_vocabulary("/tmp/vocabulary.pkl")
 
         print("Getting model and optimizer...")
-        rec, optimizer = get_trainer_and_optimizer(vocabulary, rank_global)
+        rec, optimizer = get_trainer_and_optimizer(vocabulary, rank_local)
 
         if model_path and os.path.exists(model_path):
             rec_st, optimizer_st = load_model(model_path)
             rec.load_state_dict(rec_st)
             optimizer.load_state_dict(optimizer_st)
         
-        rec = DDP(rec, device_ids=[rank_global], find_unused_parameters=True)
+        rec = DDP(rec, device_ids=[rank_local], find_unused_parameters=True)
         best_vloss = float("Inf")
 
         if rank_local == 0:
@@ -251,7 +251,7 @@ def train_func(config: dict):
             sum_loss = 0.0
             sum_rows = 0
 
-            batch_iter = dataloader.prepare_batches_prefetch(ratings_train, movies_dataset, batch_size, device=rank_global)
+            batch_iter = dataloader.prepare_batches_prefetch(ratings_train, movies_dataset, batch_size, device=rank_local)
             i = 0
             while True:
                 try:
@@ -280,12 +280,12 @@ def train_func(config: dict):
                     batch_loss.backward()
 
                     if (i+1) % accumulate_grad_batches == 0:
-                        acc_loss = torch.Tensor([sum_loss, sum_rows]).to(rank_global)
+                        acc_loss = torch.Tensor([sum_loss, sum_rows]).to(rank_local)
                         dist.reduce(acc_loss, dst=0, op=dist.ReduceOp.SUM)
+                        acc_loss = acc_loss.tolist()
+                        avg_loss = acc_loss[0]/acc_loss[1]
 
-                        if rank_local == 0:
-                            acc_loss = acc_loss.tolist()
-                            avg_loss = acc_loss[0]/acc_loss[1]
+                        if rank_global == 0:
                             print(f"Epoch: {epoch+1}, Batch: {i+1}, Average Loss: {avg_loss}")
 
                         nn.utils.clip_grad_norm_(rec.parameters(), max_norm=1.0)
@@ -302,12 +302,12 @@ def train_func(config: dict):
                     break
 
 
-            acc_loss = torch.Tensor([sum_loss, sum_rows]).to(rank_global)
+            acc_loss = torch.Tensor([sum_loss, sum_rows]).to(rank_local)
             dist.reduce(acc_loss, dst=0, op=dist.ReduceOp.SUM)
+            acc_loss = acc_loss.tolist()
+            avg_loss = acc_loss[0]/acc_loss[1]
 
-            if rank_local == 0:
-                acc_loss = acc_loss.tolist()
-                avg_loss = acc_loss[0]/acc_loss[1]
+            if rank_global == 0:
                 print(f"Epoch: {epoch+1}, Batch: {i+1}, Average Loss: {avg_loss}")
 
             nn.utils.clip_grad_norm_(rec.parameters(), max_norm=1.0)
@@ -320,7 +320,7 @@ def train_func(config: dict):
             rec.eval()
 
             with torch.no_grad():
-                batch_iter_val = dataloader.prepare_batches_prefetch(ratings_val, movies_dataset, 32, device=rank_global)
+                batch_iter_val = dataloader.prepare_batches_prefetch(ratings_val, movies_dataset, 32, device=rank_local)
                 sum_loss = 0.0
                 sum_rows = 0
 
@@ -348,7 +348,7 @@ def train_func(config: dict):
                         sum_loss += output.shape[0]*batch_loss.item()
                         sum_rows += output.shape[0]
 
-                        if rank_local == 0:
+                        if rank_global == 0:
                             print(f"Epoch: {epoch+1}, Batch: {i+1}, Loss (Rank 0): {sum_loss/sum_rows}")
 
                         if (i+1) % 100:
@@ -363,14 +363,17 @@ def train_func(config: dict):
                     if i >= max_num_batches:
                         break
                 
-                vloss = torch.Tensor([sum_loss, sum_rows]).to(rank_global)
+                vloss = torch.Tensor([sum_loss, sum_rows]).to(rank_local)
                 dist.reduce(vloss, dst=0, op=dist.ReduceOp.SUM)
 
-                if rank_local == 0:
-                    vloss = vloss.tolist()
-                    avg_vloss = vloss[0]/vloss[1]
+                vloss = vloss.tolist()
+                avg_vloss = vloss[0]/vloss[1]
+
+                if rank_global == 0:
                     print(f"Average Validation Loss: {avg_vloss}")
                     print()
+                
+                if rank_local == 0:
                     print("Checkpointing...")
                     
                     if avg_vloss < best_vloss:
@@ -438,4 +441,5 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     train_func(vars(args))
-    # torchrun --standalone --nproc_per_node=8 trainer.py --gcs_dir "gs://r6-ae-dev-adperf-adintelligence-data/amondal/parquet_dataset_ml_32m" --batch_size 128 --num_epochs 10 --accumulate_grad_batches 4
+    # torchrun --nnodes=2 --node_rank=0 --master_addr=240.76.3.7 --master_port=29500 --nproc_per_node=8 trainer.py --gcs_dir "gs://r6-ae-dev-adperf-adintelligence-data/amondal/parquet_dataset_ml_32m" --batch_size 128 --num_epochs 10 --accumulate_grad_batches 4
+    # torchrun --nnodes=2 --node_rank=1 --master_addr=240.76.3.7 --master_port=29500 --nproc_per_node=8 trainer.py --gcs_dir "gs://r6-ae-dev-adperf-adintelligence-data/amondal/parquet_dataset_ml_32m" --batch_size 128 --num_epochs 10 --accumulate_grad_batches 4
