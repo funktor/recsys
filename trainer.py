@@ -20,10 +20,12 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from model import RecommenderSystem
 from datasets import Dataset
 import gc
-import multiprocessing
+import torch.multiprocessing as mp
 import time
 from data_generator import upload_directory_with_transfer_manager
 import joblib
+
+mp.set_start_method('spawn', force=True)
 
 # Ensure that all operations are deterministic on GPU (if used) for reproducibility
 torch.backends.cudnn.deterministic = True
@@ -309,7 +311,7 @@ def train_func(config: dict):
     accumulate_grad_batches = config["accumulate_grad_batches"]
     model_path = config["existing_model_path"]
     max_num_batches = config["max_num_batches"]
-    num_workers = min(multiprocessing.cpu_count()-1, config["num_workers"])
+    num_workers = min(mp.cpu_count()-1, config["num_workers"])
     model_out_dir = config["model_out_dir"]
 
     datasets_gcs_path = f"gs://{gcs_bucket_name}/{gcs_prefix}/{gcs_data_dir}"

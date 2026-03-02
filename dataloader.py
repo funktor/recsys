@@ -9,7 +9,10 @@ from google.cloud import storage
 import joblib
 from datasets import Dataset
 import multiprocessing
-from multiprocessing import Queue
+import torch.multiprocessing as mp
+from torch.multiprocessing import Queue
+
+mp.set_start_method('spawn', force=True)
 
 def pre_partitions_with_files(filepaths:List[str], world_size, rank):
     """
