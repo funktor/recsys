@@ -125,15 +125,17 @@ def pad_batch(values, dtype, max_seq_len=None):
     return arr
 
 
-def prepare_batches(ratings_dataset:Dataset, movies_dataset:pd.DataFrame, batch_size=128, device="gpu"):
+def prepare_batches(ratings_dataset:Dataset, movies_dataset:pd.DataFrame, batch_size=128, device="gpu", worker_id:int=0, num_workers:int=1000):
     """
     Prepare batch by padding and converting to numpy and tensor formats
     """
     max_seq_len = 20
     n = ratings_dataset.shape[0]
+    m = int((n + num_workers - 1)/num_workers)
+    start_index = m * worker_id
 
-    for i in range(0, n, batch_size):
-        df_ratings_batch_df:pd.DataFrame = ratings_dataset[i:min(n,i+batch_size)]
+    for i in range(start_index, m, batch_size):
+        df_ratings_batch_df:pd.DataFrame = ratings_dataset[i:min(i+batch_size, m)]
         df_ratings_batch_df = df_ratings_batch_df.reset_index()
         df_ratings_batch_df = df_ratings_batch_df.merge(movies_dataset, on=["movieId"], how="left")
 
@@ -189,17 +191,29 @@ def fill_prefetch_queue(queue:Queue, batch_iter, stream, device):
             obj.record_stream(stream)
         
         labels_gpu.record_stream(stream)
-        queue.put((data_gpu, labels_gpu))
+        queue.put((data_gpu, labels_gpu, stream))
     
     del data
     del labels
     return 1
 
 
-def fill_queue(queue:Queue, max_num_items:int, batch_iter, stream, device):
+def fill_queue(
+        queue:Queue, 
+        ratings_dataset:Dataset, 
+        movies_dataset:pd.DataFrame, 
+        batch_size:int, 
+        device:str, 
+        worker_id:int, 
+        num_workers:int, 
+        max_num_items:int):
+    
     """
     Method called by each producer process
     """
+    stream = torch.cuda.Stream()
+    batch_iter = prepare_batches(ratings_dataset, movies_dataset, batch_size, device, worker_id, num_workers)
+
     while queue.qsize() < max_num_items:
         res = fill_prefetch_queue(queue, batch_iter, stream, device)
         if res == 0:
@@ -210,16 +224,26 @@ def prepare_batches_prefetch(ratings_dataset:Dataset, movies_dataset:pd.DataFram
     """
     Get batches using prefetching through multiple workers
     """
-    stream = torch.cuda.Stream()
-    batch_iter = prepare_batches(ratings_dataset, movies_dataset, batch_size, device)
-
     # multiprocessing queue to push the prefetched batches
     queue = Queue()
 
     # Each producer process gets batches and pushes to queue
     producers = []
-    for _ in range(num_workers):
-        p = multiprocessing.Process(target=fill_queue, args=(queue, prefetch_factor*num_workers, batch_iter, stream, device))
+    for i in range(num_workers):
+        p = \
+            multiprocessing.Process(
+                target=fill_queue, 
+                args=(
+                    queue, 
+                    ratings_dataset, 
+                    movies_dataset, 
+                    batch_size, 
+                    device, 
+                    i, 
+                    num_workers, 
+                    prefetch_factor*num_workers
+                )
+            )
         p.start()
         producers += [p]
 
@@ -228,7 +252,7 @@ def prepare_batches_prefetch(ratings_dataset:Dataset, movies_dataset:pd.DataFram
         batch = queue.get()
         if batch is None:
             break
-        data, labels = batch
+        data, labels, stream = batch
         torch.cuda.current_stream().wait_stream(stream)
         yield data, labels
 
