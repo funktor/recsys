@@ -327,7 +327,7 @@ def train_func(config: dict):
         # Assign each GPU equal number of batches
         num_train_data = count_rows_in_gcs_parquet(ratings_train_path)
         print(f"Total Training Data = {num_train_data}")
-        print(f"Effective number of batches = {world_size*batch_size}")
+        print(f"Effective batch size = {world_size*batch_size}")
 
         batches_per_epoch = num_train_data // (world_size*batch_size)
         batches_per_epoch = min(batches_per_epoch, max_num_batches)

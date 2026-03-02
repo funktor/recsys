@@ -276,6 +276,7 @@ def prepare_batches_prefetch(
 
             if len(batch) > 0 and batch[0] is None:
                 completed_workers.add(batch[1])
+                print(completed_workers)
                 if len(completed_workers) == num_workers:
                     for p in producers:
                         p.join()
