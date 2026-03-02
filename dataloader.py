@@ -170,7 +170,7 @@ def prepare_batches(ratings_dataset:Dataset, movies_dataset:pd.DataFrame, batch_
         yield [user_ids, user_prev_rated_movie_ids, user_prev_ratings, movie_ids, movie_descriptions, movie_genres, movie_years], labels
 
 
-def fill_prefetch_queue(queue:Queue, batch_iter, device):
+def fill_prefetch_queue(queue:Queue, batch_iter, stream, device):
     """
     Method to fetch batch and push to queue
     """
@@ -179,13 +179,16 @@ def fill_prefetch_queue(queue:Queue, batch_iter, device):
     except StopIteration:
         queue.put(None)
         return 0
-    
-    data_gpu = []
-    for obj in data:
-        data_gpu += [obj.to(device=device, non_blocking=True)]
 
-    labels_gpu = labels.to(device=device, non_blocking=True)
-    queue.put((data_gpu, labels_gpu))
+    with torch.cuda.stream(stream): 
+        data_gpu = []
+        for obj in data:
+            data_gpu += [obj.to(device=device, non_blocking=True)]
+
+        labels_gpu = labels.to(device=device, non_blocking=True)
+        stream.synchronize()
+        queue.put((data_gpu, labels_gpu))
+    
     return 1
 
 
@@ -196,26 +199,26 @@ def fill_queue(
         batch_size:int, 
         device:str, 
         worker_id:int, 
-        num_workers:int, 
-        max_num_items:int):
+        num_workers:int):
     
     """
     Method called by each producer process
     """
+    stream = torch.cuda.Stream()
     batch_iter = prepare_batches(ratings_dataset, movies_dataset, batch_size, device, worker_id, num_workers)
 
     while True:
-        res = fill_prefetch_queue(queue, batch_iter, device)
+        res = fill_prefetch_queue(queue, batch_iter, stream, device)
         if res == 0:
             break
 
 
-def prepare_batches_prefetch(ratings_dataset:Dataset, movies_dataset:pd.DataFrame, batch_size=128, device="gpu", prefetch_factor:int=16, num_workers:int=4):
+def prepare_batches_prefetch(ratings_dataset:Dataset, movies_dataset:pd.DataFrame, batch_size=128, device="gpu", prefetch_factor:int=4, num_workers:int=4):
     """
     Get batches using prefetching through multiple workers
     """
     # multiprocessing queue to push the prefetched batches
-    queue = Queue()
+    queue = Queue(maxsize=prefetch_factor*num_workers)
 
     # Each producer process gets batches and pushes to queue
     producers = []
@@ -230,8 +233,7 @@ def prepare_batches_prefetch(ratings_dataset:Dataset, movies_dataset:pd.DataFram
                     batch_size, 
                     device, 
                     i, 
-                    num_workers, 
-                    prefetch_factor*num_workers
+                    num_workers
                 )
             )
         p.start()
@@ -244,6 +246,7 @@ def prepare_batches_prefetch(ratings_dataset:Dataset, movies_dataset:pd.DataFram
             break
         data, labels = batch
         yield data, labels
+        del batch
 
     for p in producers:
         p.join()

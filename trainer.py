@@ -458,8 +458,14 @@ def train_func(config: dict):
         optimizer.zero_grad()
 
         end_epoch_time = time.time()
-        print(f"Training Time for epoch {epoch+1} = {(end_epoch_time-start_epoch_time)/60} minutes")
 
+        duration = (end_epoch_time-start_epoch_time)/60
+        duration = torch.Tensor([duration]).to(rank_local)
+        dist.reduce(duration, dst=0, op=dist.ReduceOp.SUM)
+        duration = duration.tolist()
+
+        if rank_global == 0:
+            print(f"Training Time for epoch {epoch+1} = {duration[0]} minutes")
 
         print(f"Running validation for epoch {epoch+1}...")
         # Do validation
