@@ -197,7 +197,7 @@ def fill_queue(queue:Queue, max_num_items:int, batch_iter, stream, device):
     """
     Method called by each producer process
     """
-    while len(queue) < max_num_items:
+    while queue.qsize() < max_num_items:
         res = fill_prefetch_queue(queue, batch_iter, stream, device)
         if res == 0:
             break
