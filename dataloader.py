@@ -182,9 +182,9 @@ def fill_prefetch_queue(queue:Queue, batch_iter, device):
     
     data_gpu = []
     for obj in data:
-        data_gpu += [obj.to(device=device, non_blocking=True)]
+        data_gpu += [obj.clone().to(device=device, non_blocking=True)]
 
-    labels_gpu = labels.to(device=device, non_blocking=True)
+    labels_gpu = labels.clone().to(device=device, non_blocking=True)
     queue.put((data_gpu, labels_gpu))
     return 1
 
