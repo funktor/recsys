@@ -862,5 +862,5 @@ if __name__ == '__main__':
 # encoder-decoder transformer network
 # pytorch distributed training (DDP) multi-gpu and multi-node
 # index movie embeddings/semantic IDS
-# 
-# custom loss, learning rate scheduler, optimizer, pos encoder, automatic mixed precision training, transformer + flash attention in C++/CUDA
+
+# deep dive - custom loss, learning rate scheduler, optimizer, pos encoder, automatic mixed precision training, transformer + flash attention, product quantization, approx. nearest neighbors in C++/CUDA

@@ -12,6 +12,9 @@ from google.cloud import storage
 from google.cloud.storage import Client, transfer_manager
 
 def remove_stop(x):
+    """
+    Remove stopwords
+    """
     stopwords = ["i", "me", "my", "myself", "we", "our", "ours", "ourselves", "you", "your", "yours", "yourself", "yourselves", "he", "him", "his", "himself", "she", "her", "hers", "herself", "it", "its", "itself", "they", "them", "their", "theirs", "themselves", "what", "which", "who", "whom", "this", "that", "these", "those", "am", "is", "are", "was", "were", "be", "been", "being", "have", "has", "had", "having", "do", "does", "did", "doing", "a", "an", "the", "and", "but", "if", "or", "because", "as", "until", "while", "of", "at", "by", "for", "with", "about", "against", "between", "into", "through", "during", "before", "after", "above", "below", "to", "from", "up", "down", "in", "out", "on", "off", "over", "under", "again", "further", "then", "once", "here", "there", "when", "where", "why", "how", "all", "any", "both", "each", "few", "more", "most", "other", "some", "such", "no", "nor", "not", "only", "own", "same", "so", "than", "too", "very", "s", "t", "can", "will", "just", "don", "should", "now"]
     out = []
     for y in x:
@@ -20,6 +23,9 @@ def remove_stop(x):
     return out
 
 def flatten_lists(x):
+    """
+    Flatten nested lists
+    """
     out = set()
     for y in x:
         out.update(y.split(" "))
@@ -27,6 +33,9 @@ def flatten_lists(x):
     return out
 
 def get_ml_32m_dataframe(path:str):
+    """
+    Read dataset file and create pandas dataframes
+    """
     ratings_path = os.path.join(path, 'ratings.csv')
     movies_path = os.path.join(path, 'movies.csv')
     tags_path = os.path.join(path, 'tags.csv')
@@ -71,6 +80,9 @@ def get_ml_32m_dataframe(path:str):
     return df_ratings, df_movies
 
 def normalize_ratings(df:pd.DataFrame):
+    """
+    Normalize ratings
+    """
     df2 = df[["userId", "rating"]].groupby(by=["userId"]).agg(mean_user_rating=('rating', 'mean'), std_user_rating=('rating', 'std'))
     df = df.merge(df2, on=["userId"], how="inner")
     df["normalized_rating"] = (df["rating"] - df["mean_user_rating"])/df["std_user_rating"]
@@ -79,6 +91,9 @@ def normalize_ratings(df:pd.DataFrame):
     return df
 
 def split_train_test(df:pd.DataFrame, min_rated=10, test_ratio=0.8, val_ratio=0.8):
+    """
+    Split dataset into train, test and validation
+    """
     print("Splitting data into train test and validation...")
     # Split data into training, testing and validation
     df = df.sort_values(by='timestamp')
@@ -103,6 +118,9 @@ def split_train_test(df:pd.DataFrame, min_rated=10, test_ratio=0.8, val_ratio=0.
 
 
 def transform(x, vocab):
+    """
+    Transform using vocabulary
+    """
     if isinstance(x, list):
         out = []
         for y in x:
@@ -112,6 +130,9 @@ def transform(x, vocab):
         return vocab[x] if x in vocab else 0
     
 def categorical_encoding(df:pd.DataFrame, col:str, max_vocab_size=1000):
+    """
+    Encode categorical features
+    """
     all_vals = df[col].tolist()
     unique_vals = {}
 
@@ -136,6 +157,9 @@ def categorical_encoding(df:pd.DataFrame, col:str, max_vocab_size=1000):
     return df[col], vocab
 
 def fit_vocabulary(df_ratings:pd.DataFrame, df_movies:pd.DataFrame):
+    """
+    Fit vocabulary
+    """
     vocabulary = {}
     max_vocab_size = {'userId':1e100, 'movieId':1e100, 'description':1e5, 'genres':100, 'movie_year':1e100}
 
@@ -157,6 +181,9 @@ def fit_vocabulary(df_ratings:pd.DataFrame, df_movies:pd.DataFrame):
 
 
 def score_vocabulary(df_ratings:pd.DataFrame, vocabulary:dict):
+    """
+    Score vocabulary
+    """
     df_ratings = df_ratings.reset_index()
     for col in ['userId', 'movieId']:
         print(col)
@@ -166,6 +193,9 @@ def score_vocabulary(df_ratings:pd.DataFrame, vocabulary:dict):
 
 
 def get_historical_user_features_cpp(df:pd.DataFrame, max_hist=20):
+    """
+    Create historical sequential features of ratings
+    """
     user_ids = df['userId'].to_numpy().astype(np.uint32)
     movie_ids = df['movieId'].to_numpy().astype(np.uint32)
     ratings = df['normalized_rating'].to_numpy().astype(np.float32)
@@ -177,10 +207,23 @@ def get_historical_user_features_cpp(df:pd.DataFrame, max_hist=20):
     df["prev_ratings"] = prev_ratings
 
 
-def save_dfs_parquet(out_dir:str, vocabulary:dict, df_ratings_train:pd.DataFrame, df_ratings_val:pd.DataFrame, df_ratings_test:pd.DataFrame, df_movies:pd.DataFrame, num_partitions:int=32):
+def save_dfs_parquet(
+        out_dir:str, 
+        vocabulary:dict, 
+        df_ratings_train:pd.DataFrame, 
+        df_ratings_val:pd.DataFrame, 
+        df_ratings_test:pd.DataFrame, 
+        df_ratings_full:pd.DataFrame, 
+        df_movies:pd.DataFrame, 
+        num_partitions:int=32
+    ):
+    """
+    Save dataframe into parquet files
+    """
     df_ratings_train["partition"] = [random.randint(1, num_partitions) for _ in range(len(df_ratings_train))]
     df_ratings_val["partition"]   = [random.randint(1, num_partitions) for _ in range(len(df_ratings_val))]
     df_ratings_test["partition"]  = [random.randint(1, num_partitions) for _ in range(len(df_ratings_test))]
+    df_ratings_full["partition"]  = [random.randint(1, num_partitions) for _ in range(len(df_ratings_full))]
 
     if os.path.exists(out_dir):
         try:
@@ -193,10 +236,14 @@ def save_dfs_parquet(out_dir:str, vocabulary:dict, df_ratings_train:pd.DataFrame
     df_ratings_train.to_parquet(out_dir + "/train/", partition_cols=["partition"])
     df_ratings_val.to_parquet(out_dir + "/validation/", partition_cols=["partition"])
     df_ratings_test.to_parquet(out_dir + "/test/", partition_cols=["partition"])
+    df_ratings_full.to_parquet(out_dir + "/full_data/", partition_cols=["partition"])
     df_movies.to_parquet(out_dir + "/movies.parquet")
 
 
 def upload_directory_with_transfer_manager(bucket_name:str, source_path:str, destination_path:str, workers=8):
+    """
+    Upload local folder to GCS bucket
+    """
     try:
         storage_client = Client()
         bucket = storage_client.bucket(bucket_name)
@@ -233,6 +280,9 @@ def upload_directory_with_transfer_manager(bucket_name:str, source_path:str, des
 
 
 def delete_gcp_folder(bucket_name:str, folder_path:str):
+    """
+    Delete GCS folder
+    """
     try:
         storage_client = storage.Client()
         bucket = storage_client.bucket(bucket_name)
@@ -251,6 +301,10 @@ def delete_gcp_folder(bucket_name:str, folder_path:str):
 
 
 def run_dp_pipeline(dataset_path):
+    """
+    Run pipeline
+    """
+
     print("Reading datasets from path...")
     df_ratings, df_movies = get_ml_32m_dataframe(dataset_path)
 
@@ -268,6 +322,9 @@ def run_dp_pipeline(dataset_path):
     print("Vocabulary on test...")
     df_ratings_test = score_vocabulary(df_ratings_test, vocabulary)
 
+    print("Viocabulary full data...")
+    df_ratings_full = score_vocabulary(df_ratings, vocabulary)
+
     print("Prepare historical features train...")
     get_historical_user_features_cpp(df_ratings_train)
     print("Prepare historical features val...")
@@ -275,8 +332,11 @@ def run_dp_pipeline(dataset_path):
     print("Prepare historical features test...")
     get_historical_user_features_cpp(df_ratings_test)
 
+    print("Prepare historical features full data...")
+    get_historical_user_features_cpp(df_ratings_full)
+
     print("Saving parquet files...")
-    save_dfs_parquet("parquet_dataset_ml_32m", vocabulary, df_ratings_train, df_ratings_val, df_ratings_test, df_movies, num_partitions=32)
+    save_dfs_parquet("parquet_dataset_ml_32m", vocabulary, df_ratings_train, df_ratings_val, df_ratings_test, df_ratings_full, df_movies, num_partitions=32)
 
     print("Deleting existing folder in cloud...")
     delete_gcp_folder("r6-ae-dev-adperf-adintelligence-data", "amondal/parquet_dataset_ml_32m")
