@@ -182,9 +182,9 @@ def fill_prefetch_queue(queue:Queue, batch_iter, device):
     
     data_gpu = []
     for obj in data:
-        data_gpu += [obj.clone().to(device=device, non_blocking=True)]
+        data_gpu += [obj.to(device=device, non_blocking=True)]
 
-    labels_gpu = labels.clone().to(device=device, non_blocking=True)
+    labels_gpu = labels.to(device=device, non_blocking=True)
     queue.put((data_gpu, labels_gpu))
     return 1
 
@@ -204,7 +204,7 @@ def fill_queue(
     """
     batch_iter = prepare_batches(ratings_dataset, movies_dataset, batch_size, device, worker_id, num_workers)
 
-    while queue.qsize() < max_num_items:
+    while True:
         res = fill_prefetch_queue(queue, batch_iter, device)
         if res == 0:
             break
