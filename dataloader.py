@@ -126,7 +126,14 @@ def pad_batch(values, dtype, max_seq_len=None):
     return arr
 
 
-def prepare_batches(ratings_dataset:Dataset, movies_dataset:pd.DataFrame, batch_size=128, device="gpu", worker_id:int=0, num_workers:int=1000):
+def prepare_batches(
+        ratings_dataset:Dataset, 
+        movies_dataset:pd.DataFrame, 
+        batch_size=128, 
+        device="gpu", 
+        worker_id:int=0, 
+        num_workers:int=1000
+    ):
     """
     Prepare batch by padding and converting to numpy and tensor formats
     """
@@ -214,7 +221,14 @@ def fill_queue(
             break
 
 
-def prepare_batches_prefetch(ratings_dataset:Dataset, movies_dataset:pd.DataFrame, batch_size=128, device="gpu", prefetch_factor:int=4, num_workers:int=4):
+def prepare_batches_prefetch(
+        ratings_dataset:Dataset, 
+        movies_dataset:pd.DataFrame, 
+        batch_size=128, 
+        device="gpu", 
+        prefetch_factor:int=4, 
+        num_workers:int=4
+    ):
     """
     Get batches using prefetching through multiple workers
     """
@@ -230,7 +244,7 @@ def prepare_batches_prefetch(ratings_dataset:Dataset, movies_dataset:pd.DataFram
                 yield data_gpu, labels_gpu
             except StopIteration:
                 break
-            
+
     else:        
         # multiprocessing queue to push the prefetched batches
         queue = Queue(maxsize=prefetch_factor*num_workers)

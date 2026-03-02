@@ -12,7 +12,6 @@ import pandas as pd
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-import torch.utils.data as data
 import torch.distributed as dist
 from torch.distributed import init_process_group
 from pathlib import Path
