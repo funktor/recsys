@@ -243,7 +243,7 @@ def prepare_batches_prefetch(ratings_dataset:Dataset, movies_dataset:pd.DataFram
         if batch is None:
             break
         data, labels = batch
-        yield data.clone(), labels.clone()
+        yield data, labels
 
     for p in producers:
         p.join()
