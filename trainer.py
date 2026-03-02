@@ -599,7 +599,7 @@ if __name__ == "__main__":
     train_func(vars(args))
 
     """
-    torchrun \
+    nohup torchrun \
         --standalone \
         --nnodes=1 \
         --nproc_per_node=8 \
@@ -611,7 +611,7 @@ if __name__ == "__main__":
             --num_epochs 10 \
             --num_workers 4 \
             --accumulate_grad_batches 4 \
-            --model_out_dir "/tmp/model_outputs"
+            --model_out_dir "/tmp/model_outputs" >output.log 2>&1 &
 
 
 

@@ -186,6 +186,7 @@ def fill_prefetch_queue(queue:Queue, batch_iter, stream, device):
         data, labels = next(batch_iter)
     except StopIteration:
         queue.put(None)
+        return
 
     with torch.cuda.stream(stream): 
         data_gpu = []
