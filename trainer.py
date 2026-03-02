@@ -465,14 +465,14 @@ def train_func(config: dict):
         duration = duration.tolist()
 
         if rank_global == 0:
-            print(f"Training Time for epoch {epoch+1} = {duration[0]} minutes")
+            print(f"Training Time for epoch {epoch+1} = {duration[0]/world_size} minutes")
 
         print(f"Running validation for epoch {epoch+1}...")
         # Do validation
         rec.eval()
 
         with torch.no_grad():
-            batch_iter_val = dataloader.prepare_batches_prefetch(ratings_val, movies_dataset, 32, device=rank_local, num_workers=num_workers)
+            batch_iter_val = dataloader.prepare_batches_prefetch(ratings_val, movies_dataset, 1, device=rank_local, num_workers=num_workers)
             sum_loss = 0.0
             sum_rows = 0
 
@@ -607,8 +607,9 @@ if __name__ == "__main__":
             --gcs_prefix "amondal"  \
             --gcs_data_dir "parquet_dataset_ml_32m" \
             --batch_size 128 \
-            --max_num_batches 100 \
-            --num_epochs 10 \
+            --max_num_batches 1000 \
+            --num_epochs 1 \
+            --num_workers 4 \
             --accumulate_grad_batches 4 \
             --model_out_dir "/tmp/model_outputs"
 
