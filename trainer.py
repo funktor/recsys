@@ -472,7 +472,7 @@ def train_func(config: dict):
         rec.eval()
 
         with torch.no_grad():
-            batch_iter_val = dataloader.prepare_batches_prefetch(ratings_val, movies_dataset, 1, device=rank_local, num_workers=num_workers)
+            batch_iter_val = dataloader.prepare_batches_prefetch(ratings_val, movies_dataset, 1, device=rank_local, prefetch_factor=0)
             sum_loss = 0.0
             sum_rows = 0
 

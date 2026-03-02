@@ -11,6 +11,7 @@ from datasets import Dataset
 import multiprocessing
 import torch.multiprocessing as mp
 from torch.multiprocessing import Queue
+from collections import deque
 
 mp.set_start_method('spawn', force=True)
 
@@ -217,39 +218,53 @@ def prepare_batches_prefetch(ratings_dataset:Dataset, movies_dataset:pd.DataFram
     """
     Get batches using prefetching through multiple workers
     """
-    # multiprocessing queue to push the prefetched batches
-    queue = Queue(maxsize=prefetch_factor*num_workers)
+    if prefetch_factor == 0:
+        batch_iter = prepare_batches(ratings_dataset, movies_dataset, batch_size, device, 0, 1)
+        while True:
+            try:
+                data, labels = next(batch_iter)
+                data_gpu = []
+                for obj in data:
+                    data_gpu += [obj.to(device=device)]
+                labels_gpu = labels.to(device=device)
+                yield data_gpu, labels_gpu
+            except StopIteration:
+                break
+            
+    else:        
+        # multiprocessing queue to push the prefetched batches
+        queue = Queue(maxsize=prefetch_factor*num_workers)
 
-    # Each producer process gets batches and pushes to queue
-    producers = []
-    for i in range(num_workers):
-        p = \
-            multiprocessing.Process(
-                target=fill_queue, 
-                args=(
-                    queue, 
-                    ratings_dataset, 
-                    movies_dataset, 
-                    batch_size, 
-                    device, 
-                    i, 
-                    num_workers
+        # Each producer process gets batches and pushes to queue
+        producers = []
+        for i in range(num_workers):
+            p = \
+                multiprocessing.Process(
+                    target=fill_queue, 
+                    args=(
+                        queue, 
+                        ratings_dataset, 
+                        movies_dataset, 
+                        batch_size, 
+                        device, 
+                        i, 
+                        num_workers
+                    )
                 )
-            )
-        p.start()
-        producers += [p]
+            p.start()
+            producers += [p]
 
-    # Main consumer process from queue
-    while True:
-        batch = queue.get()
-        if batch is None:
-            break
-        data, labels = batch
-        yield data, labels
-        del batch
+        # Main consumer process from queue
+        while True:
+            batch = queue.get()
+            if batch is None:
+                break
+            data, labels = batch
+            yield data, labels
+            del batch
 
-    for p in producers:
-        p.join()
+        for p in producers:
+            p.join()
 
 
 def get_unique_movies(movies_dataset:pd.DataFrame, batch_size=128, device="gpu"):
