@@ -139,7 +139,8 @@ def prepare_batches(
     """
     max_seq_len = 20
     n = ratings_dataset.shape[0]
-    m = int((n + num_workers - 1)/num_workers)
+    f = int((n + num_workers*batch_size - 1)/(num_workers*batch_size))
+    m = batch_size * f
     start_index = m * worker_id
 
     for i in range(start_index, start_index + m, batch_size):
@@ -272,14 +273,14 @@ def prepare_batches_prefetch(
 
             if len(batch) > 0 and batch[0] is None:
                 completed_workers.add(batch[1])
-            
-            if len(completed_workers) == num_workers:
-                for p in producers:
-                    p.join()
-                raise StopIteration
+                if len(completed_workers) == num_workers:
+                    for p in producers:
+                        p.join()
+                    raise StopIteration
+            else:
+                data, labels = batch
+                yield data, labels
 
-            data, labels = batch
-            yield data, labels
             del batch
 
 
@@ -321,7 +322,3 @@ def get_unique_users(ratings_dataset:pd.DataFrame, batch_size=128, device="gpu")
         user_ids = torch.from_numpy(user_ids).pin_memory(device=device).to(device=device, non_blocking=True)
 
         yield user_ids
-
-
-
-
