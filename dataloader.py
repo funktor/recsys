@@ -191,7 +191,7 @@ def fill_prefetch_queue(queue:Queue, batch_iter, stream, device):
             obj.record_stream(stream)
         
         labels_gpu.record_stream(stream)
-        queue.put((data_gpu, labels_gpu, stream))
+        queue.put((data_gpu, labels_gpu))
     
     del data
     del labels
@@ -211,11 +211,10 @@ def fill_queue(
     """
     Method called by each producer process
     """
-    stream = torch.cuda.Stream()
     batch_iter = prepare_batches(ratings_dataset, movies_dataset, batch_size, device, worker_id, num_workers)
 
     while queue.qsize() < max_num_items:
-        res = fill_prefetch_queue(queue, batch_iter, stream, device)
+        res = fill_prefetch_queue(queue, batch_iter, device)
         if res == 0:
             break
 
@@ -252,8 +251,7 @@ def prepare_batches_prefetch(ratings_dataset:Dataset, movies_dataset:pd.DataFram
         batch = queue.get()
         if batch is None:
             break
-        data, labels, stream = batch
-        torch.cuda.current_stream().wait_stream(stream)
+        data, labels = batch
         yield data, labels
 
     for p in producers:
