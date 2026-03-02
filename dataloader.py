@@ -79,7 +79,8 @@ def get_datasets(path:str, world_size:int, rank:int):
             f"/tmp/huggingface/{rank}/train", 
             world_size, 
             rank
-        ).set_format('pandas')
+        )
+    ratings_train.set_format('pandas')
     
     ratings_val = \
         get_dataset(
@@ -87,7 +88,8 @@ def get_datasets(path:str, world_size:int, rank:int):
             f"/tmp/huggingface/{rank}/val", 
             world_size, 
             rank
-        ).set_format('pandas')
+        )
+    ratings_val.set_format('pandas')
     
     movies_dataset = \
         get_dataset(
