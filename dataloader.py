@@ -84,6 +84,7 @@ def get_datasets(path:str, world_size:int, rank:int):
             world_size, 
             rank
         )
+    ratings_train = ratings_train[:10000]
     ratings_train.set_format('pandas')
     
     ratings_val = \
@@ -93,6 +94,7 @@ def get_datasets(path:str, world_size:int, rank:int):
             world_size, 
             rank
         )
+    ratings_val = ratings_val[:10000]
     ratings_val.set_format('pandas')
     
     movies_dataset = \
