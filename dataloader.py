@@ -170,7 +170,7 @@ def prepare_batches(ratings_dataset:Dataset, movies_dataset:pd.DataFrame, batch_
         yield [user_ids, user_prev_rated_movie_ids, user_prev_ratings, movie_ids, movie_descriptions, movie_genres, movie_years], labels
 
 
-def fill_prefetch_queue(queue:Queue, batch_iter, stream, device):
+def fill_prefetch_queue(queue:Queue, batch_iter, device):
     """
     Method to fetch batch and push to queue
     """
@@ -180,18 +180,12 @@ def fill_prefetch_queue(queue:Queue, batch_iter, stream, device):
         queue.put(None)
         return 0
     
-    with torch.cuda.stream(stream):
-        data_gpu = []
-        for obj in data:
-            data_gpu += [obj.to(device=device, non_blocking=True)]
+    data_gpu = []
+    for obj in data:
+        data_gpu += [obj.to(device=device, non_blocking=True)]
 
-        labels_gpu = labels.to(device=device, non_blocking=True)
-        
-        for obj in data_gpu:
-            obj.record_stream(stream)
-        
-        labels_gpu.record_stream(stream)
-        queue.put((data_gpu, labels_gpu))
+    labels_gpu = labels.to(device=device, non_blocking=True)
+    queue.put((data_gpu, labels_gpu))
     
     del data
     del labels
