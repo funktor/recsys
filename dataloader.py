@@ -143,8 +143,9 @@ def prepare_batches(
     m = batch_size * f
     start_index = m * worker_id
 
-    for i in range(start_index, start_index + m, batch_size):
-        h = min(start_index + m, n)
+    h = min(start_index + m, n)
+
+    for i in range(start_index, h, batch_size):
         df_ratings_batch_df:pd.DataFrame = ratings_dataset[i:min(i+batch_size, h)]
         df_ratings_batch_df = df_ratings_batch_df.reset_index()
         df_ratings_batch_df = df_ratings_batch_df.merge(movies_dataset, on=["movieId"], how="left")
