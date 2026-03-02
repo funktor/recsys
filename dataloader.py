@@ -272,11 +272,11 @@ def prepare_batches_prefetch(
         # Main consumer process from queue
         completed_workers = set()
         while True:
+            print(queue.qsize())
             batch = queue.get()
 
             if len(batch) > 0 and batch[0] is None:
                 completed_workers.add(batch[1])
-                print(completed_workers)
                 if len(completed_workers) == num_workers:
                     for p in producers:
                         p.join()
