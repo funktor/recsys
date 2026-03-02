@@ -180,7 +180,8 @@ def save_users_embeddings(
         ratings_dataset:pd.DataFrame, 
         path:str, 
         batch_size:int=1024, 
-        users_emb_size:int=128
+        users_emb_size:int=128,
+        device:int=0
     ):
     """
     Save user embeddings as numpy memory mapped files
@@ -190,7 +191,7 @@ def save_users_embeddings(
         # get unique users from ratings dataset
         n = ratings_dataset['userId'].nunique()
         users_emb_mmap = np.memmap(path, dtype=np.float32, mode="w+", shape=(n, users_emb_size+1))
-        users_batch_iter = dataloader.get_unique_users(ratings_dataset, batch_size, device=0)
+        users_batch_iter = dataloader.get_unique_users(ratings_dataset, batch_size, device=device)
         
         i = 0
         while True:
@@ -272,7 +273,8 @@ def save_embeddings_and_metadata(
             ratings_train_full, 
             f"{USER_EMBEDDINGS_PATH}/{rank_global}/embeds.mmap", 
             batch_size=1024, 
-            users_emb_size=model.user_embedding_size
+            users_emb_size=model.user_embedding_size,
+            device=rank_local
         )
 
     joblib.dump(user_embeds_shape, f"{USER_EMBEDDINGS_PATH}/{rank_global}/user_embeds_shape.pkl")
