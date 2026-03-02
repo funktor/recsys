@@ -143,7 +143,8 @@ def prepare_batches(
     start_index = m * worker_id
 
     for i in range(start_index, start_index + m, batch_size):
-        df_ratings_batch_df:pd.DataFrame = ratings_dataset[i:min(i+batch_size, n)]
+        h = min(start_index + m, n)
+        df_ratings_batch_df:pd.DataFrame = ratings_dataset[i:min(i+batch_size, h)]
         df_ratings_batch_df = df_ratings_batch_df.reset_index()
         df_ratings_batch_df = df_ratings_batch_df.merge(movies_dataset, on=["movieId"], how="left")
 
@@ -178,14 +179,14 @@ def prepare_batches(
         yield [user_ids, user_prev_rated_movie_ids, user_prev_ratings, movie_ids, movie_descriptions, movie_genres, movie_years], labels
 
 
-def fill_prefetch_queue(queue:Queue, batch_iter, stream, device):
+def fill_prefetch_queue(queue:Queue, batch_iter, stream, device, worker_id):
     """
     Method to fetch batch and push to queue
     """
     try:
         data, labels = next(batch_iter)
     except StopIteration:
-        queue.put(None)
+        queue.put((None, worker_id))
         return
 
     with torch.cuda.stream(stream): 
@@ -214,7 +215,7 @@ def fill_queue(
     batch_iter = prepare_batches(ratings_dataset, movies_dataset, batch_size, device, worker_id, num_workers)
 
     while True:
-        fill_prefetch_queue(queue, batch_iter, stream, device)
+        fill_prefetch_queue(queue, batch_iter, stream, device, worker_id)
 
 
 def prepare_batches_prefetch(
@@ -239,7 +240,7 @@ def prepare_batches_prefetch(
                 labels_gpu = labels.to(device=device)
                 yield data_gpu, labels_gpu
             except StopIteration:
-                break
+                raise StopIteration
 
     else:        
         # multiprocessing queue to push the prefetched batches
@@ -265,16 +266,21 @@ def prepare_batches_prefetch(
             producers += [p]
 
         # Main consumer process from queue
+        completed_workers = set()
         while True:
             batch = queue.get()
-            if batch is None:
-                break
+
+            if len(batch) > 0 and batch[0] is None:
+                completed_workers.add(batch[1])
+            
+            if len(completed_workers) == num_workers:
+                for p in producers:
+                    p.join()
+                raise StopIteration
+
             data, labels = batch
             yield data, labels
             del batch
-
-        for p in producers:
-            p.join()
 
 
 def get_unique_movies(movies_dataset:pd.DataFrame, batch_size=128, device="gpu"):
