@@ -591,6 +591,22 @@ if __name__ == "__main__":
 
     """
     torchrun \
+        --standalone \
+        --nnodes=1 \
+        --nproc_per_node=8 \
+        trainer.py \
+            --gcs_bucket "r6-ae-dev-adperf-adintelligence-data" \
+            --gcs_prefix "amondal"  \
+            --gcs_data_dir "parquet_dataset_ml_32m" \
+            --batch_size 128 \
+            --max_num_batches 100 \
+            --num_epochs 10 \
+            --accumulate_grad_batches 4 \
+            --model_out_dir "/tmp/model_outputs"
+
+
+
+    torchrun \
         --nnodes=2 \
         --node_rank=0 \
         --master_addr=240.76.3.7 \
@@ -601,6 +617,7 @@ if __name__ == "__main__":
             --gcs_prefix "amondal"  \
             --gcs_data_dir "parquet_dataset_ml_32m" \
             --batch_size 128 \
+            --max_num_batches 100 \
             --num_epochs 10 \
             --accumulate_grad_batches 4 \
             --model_out_dir "/tmp/model_outputs"

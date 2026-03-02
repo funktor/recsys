@@ -322,7 +322,7 @@ def run_dp_pipeline(dataset_path):
     print("Vocabulary on test...")
     df_ratings_test = score_vocabulary(df_ratings_test, vocabulary)
 
-    print("Viocabulary full data...")
+    print("Vocabulary on full data...")
     df_ratings_full = score_vocabulary(df_ratings, vocabulary)
 
     print("Prepare historical features train...")

@@ -96,7 +96,7 @@ def get_datasets(path:str, world_size:int, rank:int):
             world_size, 
             rank, 
             in_memory=True, 
-            path_is_dir=True
+            path_is_dir=False
         ).to_pandas()
 
     return ratings_train, ratings_val, movies_dataset
