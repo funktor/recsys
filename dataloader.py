@@ -272,22 +272,19 @@ def prepare_batches_prefetch(
 
         # Main consumer process from queue
         completed_workers = set()
-        while True:
+        while len(completed_workers) < num_workers:
             batch = queue.get()
 
             if len(batch) > 0 and batch[0] is None:
                 completed_workers.add(batch[1])
-                if len(completed_workers) == num_workers:
-                    break
             else:
                 data, labels = batch
                 yield data, labels
 
             del batch
         
-        print(f"{rank} here\n")
         for p in producers:
-            p.join()
+            p.terminate()
 
 
 def get_unique_movies(movies_dataset:pd.DataFrame, batch_size=128, device="gpu"):
