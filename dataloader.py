@@ -272,20 +272,13 @@ def prepare_batches_prefetch(
         # Main consumer process from queue
         completed_workers = set()
         while True:
-            print("here1\n")
-            batch = queue.get(timeout=1)
-            print("here2\n")
+            batch = queue.get()
 
             if len(batch) > 0 and batch[0] is None:
-                print("here3\n")
                 completed_workers.add(batch[1])
                 if len(completed_workers) == num_workers:
-                    print("here4\n")
-                    for p in producers:
-                        p.join()
                     raise StopIteration
             else:
-                print("here5\n")
                 data, labels = batch
                 yield data, labels
 
