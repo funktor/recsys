@@ -386,12 +386,13 @@ def train_func(config: dict):
             with rec.join():
                 print(f"Starting epoch {epoch+1}...")
                 start_epoch_time = time.time()
-                
+
                 sum_loss = 0.0
                 sum_rows = 0
 
                 # Get batch iterator
                 batch_iter = dataloader.prepare_batches_prefetch(ratings_train, movies_dataset, batch_size, device=rank_local, num_workers=num_workers)
+                i = 0
                 while True:
                     try:
                         # Get next batch of data and labels
@@ -439,6 +440,11 @@ def train_func(config: dict):
                             optimizer.zero_grad()
 
                     except StopIteration:
+                        break
+
+                    i += 1
+
+                    if i >= batches_per_epoch:
                         break
 
                 # Do same for remaining batches (not divisible by accumulate grad batches)
