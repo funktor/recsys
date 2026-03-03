@@ -390,7 +390,7 @@ def train_func(config: dict):
 
             # Get batch iterator
             batch_iter = dataloader.prepare_batches_prefetch(ratings_train, movies_dataset, batch_size, device=rank_local, num_workers=num_workers)
-            batch_loss:torch.Tensor = torch.Tensor(0.0).to(rank_local)
+            batch_loss:torch.Tensor = torch.Tensor([0.0]).to(rank_local)
 
             for i in range(batches_per_epoch):
                 try:
