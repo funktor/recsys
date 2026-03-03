@@ -225,7 +225,6 @@ def fill_queue(
 def prepare_batches_prefetch(
         ratings_dataset:Dataset, 
         movies_dataset:pd.DataFrame, 
-        rank:int,
         batch_size=128, 
         device="gpu", 
         prefetch_factor:int=4, 

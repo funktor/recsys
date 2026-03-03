@@ -387,7 +387,7 @@ def train_func(config: dict):
         sum_rows = 0
 
         # Get batch iterator
-        batch_iter = dataloader.prepare_batches_prefetch(ratings_train, movies_dataset, rank_local, batch_size, device=rank_local, num_workers=num_workers)
+        batch_iter = dataloader.prepare_batches_prefetch(ratings_train, movies_dataset, batch_size, device=rank_local, num_workers=num_workers)
         i = 0
         while True:
             try:
@@ -443,7 +443,6 @@ def train_func(config: dict):
             if i >= batches_per_epoch:
                 break
 
-        print(f"{rank_local} is here2....")
         # Do same for remaining batches (not divisible by accumulate grad batches)
         acc_loss = torch.Tensor([sum_loss, sum_rows]).to(rank_local)
         dist.reduce(acc_loss, dst=0, op=dist.ReduceOp.SUM)
@@ -473,7 +472,7 @@ def train_func(config: dict):
         rec.eval()
 
         with torch.no_grad():
-            batch_iter_val = dataloader.prepare_batches_prefetch(ratings_val, movies_dataset, rank_local, 5, device=rank_local, prefetch_factor=0)
+            batch_iter_val = dataloader.prepare_batches_prefetch(ratings_val, movies_dataset, 5, device=rank_local, prefetch_factor=0)
             sum_loss = 0.0
             sum_rows = 0
 
