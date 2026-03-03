@@ -332,7 +332,6 @@ def train_func(config: dict):
 
         batches_per_epoch = num_train_data // (world_size*batch_size)
         batches_per_epoch = min(batches_per_epoch, max_num_batches)
-        batches_per_epoch = 160
 
         print(f"Rank={rank_global}: Train data size   = {ratings_train.shape[0]}")
         print(f"Rank={rank_global}: Val data size     = {ratings_val.shape[0]}")
@@ -438,12 +437,11 @@ def train_func(config: dict):
                         scheduler.step()
                         optimizer.zero_grad()
 
-                except StopIteration:
-                    break
-                
-                i += 1
+                    i += 1
+                    if i >= batches_per_epoch:
+                        break
 
-                if i >= batches_per_epoch:
+                except StopIteration:
                     break
 
             # Do same for remaining batches (not divisible by accumulate grad batches)
