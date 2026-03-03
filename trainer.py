@@ -388,8 +388,7 @@ def train_func(config: dict):
 
             # Get batch iterator
             batch_iter = dataloader.prepare_batches_prefetch(ratings_train, movies_dataset, batch_size, device=rank_local, num_workers=num_workers)
-            i = 0
-            while True:
+            for i in range(batches_per_epoch):
                 try:
                     # Get next batch of data and labels
                     batch = next(batch_iter)
@@ -417,31 +416,27 @@ def train_func(config: dict):
                     
                     batch_loss.backward()
 
-                    # Accumulate batches to compute gradient
-                    if (i+1) % accumulate_grad_batches == 0:
-                        # Broadcast total loss and total number of rows to all gpu workers to calculate avg loss
-                        acc_loss = torch.Tensor([sum_loss, sum_rows]).to(rank_local)
-                        dist.reduce(acc_loss, dst=0, op=dist.ReduceOp.SUM)
-                        acc_loss = acc_loss.tolist()
-                        avg_loss = acc_loss[0]/acc_loss[1]
-
-                        # Print loss by rank=0 worker
-                        if rank_global == 0:
-                            print(f"Epoch: {epoch+1}, Batch: {i+1}, Average Loss: {avg_loss}")
-
-                        # Compute gradients
-                        nn.utils.clip_grad_norm_(rec.parameters(), max_norm=1.0)
-                        optimizer.step()
-                        scheduler.step()
-                        optimizer.zero_grad()
-
                 except StopIteration:
-                    break
+                    pass
 
-                i += 1
+                # Accumulate batches to compute gradient
+                if (i+1) % accumulate_grad_batches == 0:
+                    # Broadcast total loss and total number of rows to all gpu workers to calculate avg loss
+                    acc_loss = torch.Tensor([sum_loss, sum_rows]).to(rank_local)
+                    dist.reduce(acc_loss, dst=0, op=dist.ReduceOp.SUM)
+                    acc_loss = acc_loss.tolist()
+                    avg_loss = acc_loss[0]/acc_loss[1]
 
-                if i >= batches_per_epoch:
-                    break
+                    # Print loss by rank=0 worker
+                    if rank_global == 0:
+                        print(f"Epoch: {epoch+1}, Batch: {i+1}, Average Loss: {avg_loss}")
+
+                    # Compute gradients
+                    nn.utils.clip_grad_norm_(rec.parameters(), max_norm=1.0)
+                    optimizer.step()
+                    scheduler.step()
+                    optimizer.zero_grad()
+
 
             # Do same for remaining batches (not divisible by accumulate grad batches)
             acc_loss = torch.Tensor([sum_loss, sum_rows]).to(rank_local)
@@ -466,6 +461,7 @@ def train_func(config: dict):
 
             if rank_global == 0:
                 print(f"Training Time for epoch {epoch+1} = {duration[0]/world_size} minutes")
+                
 
             print(f"Running validation for epoch {epoch+1}...")
             # Do validation
@@ -567,7 +563,7 @@ def train_func(config: dict):
         # delete the marker files
         if os.path.exists(f"/tmp/marker_file_{rank_local}.txt"):
             Path(f"/tmp/marker_file_{rank_local}.txt").unlink()
-            
+
         # destroy ddp processes
         if dist.is_initialized():
             dist.destroy_process_group()
