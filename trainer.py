@@ -298,7 +298,8 @@ def train_func(config: dict):
         rank_local  = int(os.environ["LOCAL_RANK"])
         rank_global = int(os.environ["RANK"])
         world_size  = int(os.environ["WORLD_SIZE"])
-        num_nodes   = int(os.environ["NUM_NODES"])
+
+        num_gpu_workers = int(torch.cuda.device_count())
 
         print(f"WORLD SIZE = {world_size}")
 
@@ -339,7 +340,7 @@ def train_func(config: dict):
         # Download vocabulary to local path only by rank=0 worker. Need to synchronize using marker file 
         if rank_local == 0:
             dataloader.download_vocabulary(path_vocab, VOCAB_PATH)
-            for i in range(world_size // num_nodes):
+            for i in range(num_gpu_workers):
                 Path(f"/tmp/marker_file_{i}.txt").touch()
 
         while True:
