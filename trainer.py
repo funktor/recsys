@@ -444,7 +444,7 @@ def train_func(config: dict):
                 if i >= batches_per_epoch:
                     break
 
-
+            print(f"{rank_local} exited...")
             # Do same for remaining batches (not divisible by accumulate grad batches)
             acc_loss = torch.Tensor([sum_loss, sum_rows]).to(rank_local)
             dist.reduce(acc_loss, dst=0, op=dist.ReduceOp.SUM)
