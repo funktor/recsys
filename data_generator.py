@@ -220,10 +220,15 @@ def save_dfs_parquet(
     """
     Save dataframe into parquet files
     """
-    df_ratings_train["partition"] = [random.randint(1, num_partitions) for _ in range(len(df_ratings_train))]
-    df_ratings_val["partition"]   = [random.randint(1, num_partitions) for _ in range(len(df_ratings_val))]
-    df_ratings_test["partition"]  = [random.randint(1, num_partitions) for _ in range(len(df_ratings_test))]
-    df_ratings_full["partition"]  = [random.randint(1, num_partitions) for _ in range(len(df_ratings_full))]
+    df_ratings_train["partition"] = df_ratings_train.index % num_partitions
+    df_ratings_val["partition"]   = df_ratings_val.index % num_partitions
+    df_ratings_test["partition"]  = df_ratings_test.index % num_partitions
+    df_ratings_full["partition"]  = df_ratings_full.index % num_partitions
+
+    df_ratings_train = df_ratings_train.sample(frac=1).reset_index()
+    df_ratings_val   = df_ratings_val.sample(frac=1).reset_index()
+    df_ratings_test  = df_ratings_test.sample(frac=1).reset_index()
+    df_ratings_full  = df_ratings_full.sample(frac=1).reset_index()
 
     if os.path.exists(out_dir):
         try:
