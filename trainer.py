@@ -461,7 +461,7 @@ def train_func(config: dict):
 
             if rank_global == 0:
                 print(f"Training Time for epoch {epoch+1} = {duration[0]/world_size} minutes")
-                
+
 
             print(f"Running validation for epoch {epoch+1}...")
             # Do validation
@@ -625,8 +625,8 @@ if __name__ == "__main__":
             --gcs_prefix "amondal"  \
             --gcs_data_dir "parquet_dataset_ml_32m" \
             --batch_size 128 \
-            --max_num_batches 100 \
             --num_epochs 10 \
+            --num_workers 4 \
             --accumulate_grad_batches 4 \
             --model_out_dir "/tmp/model_outputs"
 
@@ -642,6 +642,7 @@ if __name__ == "__main__":
             --gcs_data_dir "parquet_dataset_ml_32m" \
             --batch_size 128 \
             --num_epochs 10 \
+            --num_workers 4 \
             --accumulate_grad_batches 4 \
             --model_out_dir "/tmp/model_outputs"
     """
