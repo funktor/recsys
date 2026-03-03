@@ -232,6 +232,7 @@ def prepare_batches_prefetch(
     """
     if prefetch_factor == 0:
         batch_iter = prepare_batches(ratings_dataset, movies_dataset, batch_size, device, 0, 1)
+        
         while True:
             try:
                 data, labels = next(batch_iter)
@@ -276,7 +277,7 @@ def prepare_batches_prefetch(
                     yield data, labels
                 
                 del batch
-            except Exception as e:
+            except Exception:
                 for p in producers:
                     p.terminate()
 

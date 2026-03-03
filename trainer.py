@@ -379,6 +379,12 @@ def train_func(config: dict):
                 warmup=50, 
                 max_iters=batches_per_epoch*max_num_epochs/accumulate_grad_batches
             )
+        
+        # Get training batch iterator
+        batch_iter_train = dataloader.prepare_batches_prefetch(ratings_train, movies_dataset, batch_size, device=rank_local, num_workers=num_workers)
+
+        # Get validation batch iterator
+        batch_iter_val = dataloader.prepare_batches_prefetch(ratings_val, movies_dataset, batch_size, device=rank_local, prefetch_factor=0)
 
         for epoch in range(max_num_epochs):
             print(f"Starting epoch {epoch+1}...")
@@ -387,14 +393,12 @@ def train_func(config: dict):
 
             sum_loss = 0.0
             sum_rows = 0
-
-            # Get batch iterator
-            batch_iter = dataloader.prepare_batches_prefetch(ratings_train, movies_dataset, batch_size, device=rank_local, num_workers=num_workers)
+            
             i = 0
             while True:
                 try:
                     # Get next batch of data and labels
-                    batch = next(batch_iter)
+                    batch = next(batch_iter_train)
 
                     data, labels = batch
                     user_ids, user_prev_rated_movie_ids, user_prev_ratings, movie_ids, movie_descriptions, movie_genres, movie_years = data
@@ -474,7 +478,6 @@ def train_func(config: dict):
             rec.eval()
 
             with torch.no_grad():
-                batch_iter_val = dataloader.prepare_batches_prefetch(ratings_val, movies_dataset, 5, device=rank_local, prefetch_factor=0)
                 sum_loss = 0.0
                 sum_rows = 0
 
@@ -510,12 +513,12 @@ def train_func(config: dict):
                             torch.cuda.empty_cache()
                             gc.collect()
 
+                        i += 1
+
+                        if i >= max_num_batches:
+                            break
+
                     except StopIteration:
-                        break
-
-                    i += 1
-
-                    if i >= max_num_batches:
                         break
                 
                 # Compute average validation loss after 1st epoch
