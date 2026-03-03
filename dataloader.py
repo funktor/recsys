@@ -144,14 +144,10 @@ def prepare_batches(
     """
     max_seq_len = 20
     n = ratings_dataset.shape[0]
-    f = int((n + num_workers*batch_size - 1)/(num_workers*batch_size))
-    m = batch_size * f
-    start_index = m * worker_id
+    i = worker_id
 
-    h = min(start_index + m, n)
-
-    for i in range(start_index, h, batch_size):
-        df_ratings_batch_df:pd.DataFrame = ratings_dataset[i:min(i+batch_size, h)]
+    while True:
+        df_ratings_batch_df:pd.DataFrame = ratings_dataset[i:min(i+batch_size, n)]
         df_ratings_batch_df = df_ratings_batch_df.reset_index()
         df_ratings_batch_df = df_ratings_batch_df.merge(movies_dataset, on=["movieId"], how="left")
 
@@ -183,6 +179,8 @@ def prepare_batches(
 
         labels = torch.from_numpy(labels).pin_memory()
 
+        i = (i + num_workers*batch_size) % n
+
         yield [user_ids, user_prev_rated_movie_ids, user_prev_ratings, movie_ids, movie_descriptions, movie_genres, movie_years], labels
 
 
@@ -193,7 +191,7 @@ def fill_prefetch_queue(queue:Queue, batch_iter, stream, device, worker_id):
     try:
         data, labels = next(batch_iter)
     except StopIteration:
-        queue.put((None, worker_id))
+        queue.put(None)
         return
 
     with torch.cuda.stream(stream): 
@@ -273,21 +271,20 @@ def prepare_batches_prefetch(
             producers += [p]
 
         # Main consumer process from queue
-        completed_workers = set()
-        while len(completed_workers) < num_workers:
-            batch = queue.get()
+        while True:
+            try:
+                batch = queue.get()
 
-            if len(batch) > 0 and batch[0] is None:
-                completed_workers.add(batch[1])
-            else:
-                data, labels = batch
-                yield data, labels
-
-            del batch
-        
-        # Terminate producer processes
-        for p in producers:
-            p.terminate()
+                if batch is not None:
+                    data, labels = batch
+                    yield data, labels
+                
+                del batch
+            except Exception as e:
+                print(e)
+            finally:
+                for p in producers:
+                    p.terminate()
 
 
 def get_unique_movies(movies_dataset:pd.DataFrame, batch_size=128, device="gpu"):

@@ -437,14 +437,13 @@ def train_func(config: dict):
                         optimizer.zero_grad()
 
                 except StopIteration:
-                    batch_iter = dataloader.prepare_batches_prefetch(ratings_train, movies_dataset, batch_size, device=rank_local, num_workers=num_workers)
+                    break
                 
                 i += 1
 
                 if i >= batches_per_epoch:
                     break
 
-            print(f"{rank_local} exited...")
             # Do same for remaining batches (not divisible by accumulate grad batches)
             acc_loss = torch.Tensor([sum_loss, sum_rows]).to(rank_local)
             dist.reduce(acc_loss, dst=0, op=dist.ReduceOp.SUM)
