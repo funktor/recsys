@@ -281,8 +281,6 @@ def prepare_batches_prefetch(
                 
                 del batch
             except Exception as e:
-                print(e)
-            finally:
                 for p in producers:
                     p.terminate()
 
