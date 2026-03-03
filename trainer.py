@@ -392,7 +392,7 @@ def train_func(config: dict):
             batch_iter = dataloader.prepare_batches_prefetch(ratings_train, movies_dataset, batch_size, device=rank_local, num_workers=num_workers)
             prev_batch_loss = torch.Tensor([0.0]).to(rank_local)
 
-            for i in range(batches_per_epoch):
+            for i in range(160):
                 try:
                     # Get next batch of data and labels
                     batch = next(batch_iter)
