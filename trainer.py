@@ -391,6 +391,8 @@ def train_func(config: dict):
             i = 0
             while True:
                 try:
+                    if rank_global == 0:
+                        print(f"Current Batch: {i+1}")
                     # Get next batch of data and labels
                     batch = next(batch_iter)
 
@@ -434,9 +436,6 @@ def train_func(config: dict):
                         optimizer.step()
                         scheduler.step()
                         optimizer.zero_grad()
-
-                    if rank_global == 0:
-                        print(f"Current Batch: {i+1}")
 
                 except StopIteration:
                     break
