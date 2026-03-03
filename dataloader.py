@@ -12,6 +12,7 @@ import multiprocessing
 import torch.multiprocessing as mp
 from torch.multiprocessing import Queue
 from collections import deque
+import random
 
 mp.set_start_method('spawn', force=True)
 
@@ -85,6 +86,8 @@ def get_datasets(path:str, world_size:int, rank:int):
             rank
         )
     ratings_train.set_format('pandas')
+    n = random.randint(10000, 20000)
+    ratings_train = ratings_train[:n]
     
     ratings_val = \
         get_dataset(
@@ -94,6 +97,8 @@ def get_datasets(path:str, world_size:int, rank:int):
             rank
         )
     ratings_val.set_format('pandas')
+    n = random.randint(10000, 20000)
+    ratings_val = ratings_val[:n]
     
     movies_dataset = \
         get_dataset(
