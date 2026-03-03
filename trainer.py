@@ -390,9 +390,8 @@ def train_func(config: dict):
 
             # Get batch iterator
             batch_iter = dataloader.prepare_batches_prefetch(ratings_train, movies_dataset, batch_size, device=rank_local, num_workers=num_workers)
-            prev_batch_loss = torch.Tensor([0.0]).to(rank_local)
-
-            for i in range(160):
+            i = 0
+            while True:
                 try:
                     # Get next batch of data and labels
                     batch = next(batch_iter)
@@ -415,33 +414,34 @@ def train_func(config: dict):
                     batch_loss:torch.Tensor = criterion(output.contiguous(), labels.contiguous())
                     batch_loss /= accumulate_grad_batches
 
-                    prev_batch_loss = batch_loss.clone()
-
                     sum_loss += output.shape[0]*batch_loss.item()
                     sum_rows += output.shape[0]
 
+                    # Accumulate batches to compute gradient
+                    if (i+1) % accumulate_grad_batches == 0:
+                        # Broadcast total loss and total number of rows to all gpu workers to calculate avg loss
+                        acc_loss = torch.Tensor([sum_loss, sum_rows]).to(rank_local)
+                        dist.reduce(acc_loss, dst=0, op=dist.ReduceOp.SUM)
+                        acc_loss = acc_loss.tolist()
+                        avg_loss = acc_loss[0]/acc_loss[1]
+
+                        # Print loss by rank=0 worker
+                        if rank_global == 0:
+                            print(f"Epoch: {epoch+1}, Batch: {i+1}, Average Loss: {avg_loss}")
+
+                        # Compute gradients
+                        nn.utils.clip_grad_norm_(rec.parameters(), max_norm=1.0)
+                        optimizer.step()
+                        scheduler.step()
+                        optimizer.zero_grad()
+
                 except StopIteration:
-                    batch_loss:torch.Tensor = prev_batch_loss.clone()
+                    batch_iter = dataloader.prepare_batches_prefetch(ratings_train, movies_dataset, batch_size, device=rank_local, num_workers=num_workers)
                 
-                batch_loss.backward()
+                i += 1
 
-                # Accumulate batches to compute gradient
-                if (i+1) % accumulate_grad_batches == 0:
-                    # Broadcast total loss and total number of rows to all gpu workers to calculate avg loss
-                    acc_loss = torch.Tensor([sum_loss, sum_rows]).to(rank_local)
-                    dist.reduce(acc_loss, dst=0, op=dist.ReduceOp.SUM)
-                    acc_loss = acc_loss.tolist()
-                    avg_loss = acc_loss[0]/acc_loss[1]
-
-                    # Print loss by rank=0 worker
-                    if rank_global == 0:
-                        print(f"Epoch: {epoch+1}, Batch: {i+1}, Average Loss: {avg_loss}")
-
-                    # Compute gradients
-                    nn.utils.clip_grad_norm_(rec.parameters(), max_norm=1.0)
-                    optimizer.step()
-                    scheduler.step()
-                    optimizer.zero_grad()
+                if i >= batches_per_epoch:
+                    break
 
 
             # Do same for remaining batches (not divisible by accumulate grad batches)
