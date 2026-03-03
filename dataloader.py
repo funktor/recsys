@@ -144,7 +144,7 @@ def prepare_batches(
     """
     max_seq_len = 20
     n = ratings_dataset.shape[0]
-    i = worker_id
+    i = worker_id*batch_size
 
     while True:
         df_ratings_batch_df:pd.DataFrame = ratings_dataset[i:min(i+batch_size, n)]
