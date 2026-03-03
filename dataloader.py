@@ -244,7 +244,7 @@ def prepare_batches_prefetch(
                 labels_gpu = labels.to(device=device)
                 yield data_gpu, labels_gpu
             except StopIteration:
-                raise StopIteration
+                break
 
     else:        
         # multiprocessing queue to push the prefetched batches
@@ -277,12 +277,15 @@ def prepare_batches_prefetch(
             if len(batch) > 0 and batch[0] is None:
                 completed_workers.add(batch[1])
                 if len(completed_workers) == num_workers:
-                    raise StopIteration
+                    break
             else:
                 data, labels = batch
                 yield data, labels
 
             del batch
+        
+        for p in producers:
+            p.join()
 
 
 def get_unique_movies(movies_dataset:pd.DataFrame, batch_size=128, device="gpu"):
