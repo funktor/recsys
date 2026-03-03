@@ -11,8 +11,6 @@ from datasets import Dataset
 import multiprocessing
 import torch.multiprocessing as mp
 from torch.multiprocessing import Queue
-from collections import deque
-import random
 
 mp.set_start_method('spawn', force=True)
 
@@ -232,7 +230,7 @@ def prepare_batches_prefetch(
     """
     if prefetch_factor == 0:
         batch_iter = prepare_batches(ratings_dataset, movies_dataset, batch_size, device, 0, 1)
-        
+
         while True:
             try:
                 data, labels = next(batch_iter)
