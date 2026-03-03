@@ -388,6 +388,8 @@ def train_func(config: dict):
 
             # Get batch iterator
             batch_iter = dataloader.prepare_batches_prefetch(ratings_train, movies_dataset, batch_size, device=rank_local, num_workers=num_workers)
+            batch_loss:torch.Tensor = torch.Tensor(0.0).to(rank_local)
+
             for i in range(batches_per_epoch):
                 try:
                     # Get next batch of data and labels
@@ -413,11 +415,11 @@ def train_func(config: dict):
 
                     sum_loss += output.shape[0]*batch_loss.item()
                     sum_rows += output.shape[0]
-                    
-                    batch_loss.backward()
 
                 except StopIteration:
                     pass
+                
+                batch_loss.backward()
 
                 # Accumulate batches to compute gradient
                 if (i+1) % accumulate_grad_batches == 0:
@@ -617,7 +619,7 @@ if __name__ == "__main__":
     torchrun \
         --nnodes=2 \
         --node_rank=0 \
-        --master_addr=240.76.3.7 \
+        --master_addr=240.76.44.135 \
         --master_port=29500 \
         --nproc_per_node=8 \
         trainer.py \
@@ -633,7 +635,7 @@ if __name__ == "__main__":
     torchrun \
         --nnodes=2 \
         --node_rank=1 \
-        --master_addr=240.76.3.7 \
+        --master_addr=240.76.44.135 \
         --master_port=29500 \
         --nproc_per_node=8 \
         trainer.py \
