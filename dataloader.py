@@ -85,7 +85,6 @@ def get_datasets(path:str, world_size:int, rank:int):
             rank
         )
     ratings_train.set_format('pandas')
-    ratings_train = ratings_train[:10000]
     
     ratings_val = \
         get_dataset(
@@ -95,7 +94,6 @@ def get_datasets(path:str, world_size:int, rank:int):
             rank
         )
     ratings_val.set_format('pandas')
-    ratings_val = ratings_val[:10000]
     
     movies_dataset = \
         get_dataset(
@@ -282,6 +280,7 @@ def prepare_batches_prefetch(
 
             del batch
         
+        # Terminate producer processes
         for p in producers:
             p.terminate()
 
