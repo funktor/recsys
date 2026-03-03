@@ -418,6 +418,8 @@ def train_func(config: dict):
                     sum_loss += output.shape[0]*batch_loss.item()
                     sum_rows += output.shape[0]
 
+                    batch_loss.backward()
+
                     # Accumulate batches to compute gradient
                     if (i+1) % accumulate_grad_batches == 0:
                         # Broadcast total loss and total number of rows to all gpu workers to calculate avg loss
