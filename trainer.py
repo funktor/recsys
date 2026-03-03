@@ -394,9 +394,6 @@ def train_func(config: dict):
                     # Get next batch of data and labels
                     batch = next(batch_iter)
 
-                    if rank_global == 0:
-                        print(f"Current Batch: {i+1}")
-
                     data, labels = batch
                     user_ids, user_prev_rated_movie_ids, user_prev_ratings, movie_ids, movie_descriptions, movie_genres, movie_years = data
 
