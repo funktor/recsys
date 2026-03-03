@@ -277,7 +277,6 @@ def prepare_batches_prefetch(
             if len(batch) > 0 and batch[0] is None:
                 completed_workers.add(batch[1])
                 if len(completed_workers) == num_workers:
-                    print("Completed")
                     for p in producers:
                         p.join()
                     raise StopIteration
