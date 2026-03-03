@@ -272,8 +272,9 @@ def prepare_batches_prefetch(
         # Main consumer process from queue
         completed_workers = set()
         while True:
-            print(queue.qsize())
+            print("here1")
             batch = queue.get()
+            print("here2")
 
             if len(batch) > 0 and batch[0] is None:
                 completed_workers.add(batch[1])
