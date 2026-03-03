@@ -435,10 +435,12 @@ def train_func(config: dict):
                         scheduler.step()
                         optimizer.zero_grad()
 
+                    if rank_global == 0:
+                        print(f"Current Batch: {i+1}")
+
                 except StopIteration:
                     break
 
-                print(f"{rank_local} is here1....")
                 i += 1
 
                 if i >= batches_per_epoch:
