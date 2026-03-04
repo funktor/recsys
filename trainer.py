@@ -611,6 +611,12 @@ if __name__ == "__main__":
     train_func(vars(args))
 
     """
+    pip install --upgrade Cython
+    python setup_ml_32m_gcp.py bdist_wheel
+    pip install --force-reinstall dist/*.whl
+
+    nvidia-smi --query-compute-apps=pid --format=csv,noheader | xargs -n1 kill -9
+
     nohup torchrun \
         --standalone \
         --nnodes=1 \
