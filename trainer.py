@@ -295,9 +295,9 @@ def train_func(config: dict):
         if dist.is_initialized() is False:
             ddp_setup()
 
-        rank_local  = int(os.environ["LOCAL_RANK"])
-        rank_global = int(os.environ["RANK"])
-        world_size  = int(os.environ["WORLD_SIZE"])
+        rank_local  = int(os.environ["OMPI_COMM_WORLD_LOCAL_RANK"])
+        rank_global = int(os.environ["OMPI_COMM_WORLD_RANK"])
+        world_size  = int(os.environ["OMPI_COMM_WORLD_SIZE"])
 
         num_gpu_workers = int(torch.cuda.device_count())
 
@@ -654,4 +654,22 @@ if __name__ == "__main__":
             --num_workers 4 \
             --accumulate_grad_batches 4 \
             --model_out_dir "/tmp/model_outputs" >output.log 2>&1 &
+
+    mpirun -np 16 \
+        -H 240.76.37.135:8,240.76.41.135:8 \
+        -x MASTER_ADDR=240.76.37.135 \
+        -x MASTER_PORT=29500 \
+        -x PATH \
+        -bind-to none -map-by slot \
+        -mca pml ob1 -mca btl ^openib \
+        python \
+            trainer.py \
+                --gcs_bucket "r6-ae-dev-adperf-adintelligence-data" \
+                --gcs_prefix "amondal"  \
+                --gcs_data_dir "parquet_dataset_ml_32m" \
+                --batch_size 128 \
+                --num_epochs 10 \
+                --num_workers 4 \
+                --accumulate_grad_batches 4 \
+                --model_out_dir "/tmp/model_outputs"
     """
