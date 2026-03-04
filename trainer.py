@@ -667,7 +667,7 @@ if __name__ == "__main__":
         -bind-to none -map-by slot \
         -mca pml ob1 -mca btl ^openib \
         python \
-            trainer.py \
+            /home/ray/trainer.py \
                 --gcs_bucket "r6-ae-dev-adperf-adintelligence-data" \
                 --gcs_prefix "amondal"  \
                 --gcs_data_dir "parquet_dataset_ml_32m" \
@@ -676,4 +676,15 @@ if __name__ == "__main__":
                 --num_workers 4 \
                 --accumulate_grad_batches 4 \
                 --model_out_dir "/tmp/model_outputs"
+
+    sudo apt update
+    sudo apt install openssh-server -y
+    sudo service ssh start
+
+    On the destination pod
+    mkdir -p ~/.ssh
+    chmod 700 ~/.ssh
+    # Append the copied key (paste the output from 'cat ~/.ssh/id_rsa.pub' here)
+    echo "PASTE_YOUR_PUBLIC_KEY_HERE" >> ~/.ssh/authorized_keys
+    chmod 600 ~/.ssh/authorized_keys
     """
