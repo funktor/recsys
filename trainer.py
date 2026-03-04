@@ -34,8 +34,12 @@ def ddp_setup():
     """
     Setup DDP
     """
-    init_process_group(backend="nccl")
-    torch.cuda.set_device(int(os.environ["OMPI_COMM_WORLD_LOCAL_RANK"]))
+    rank_local  = int(os.environ["OMPI_COMM_WORLD_LOCAL_RANK"])
+    rank_global = int(os.environ["OMPI_COMM_WORLD_RANK"])
+    world_size  = int(os.environ["OMPI_COMM_WORLD_SIZE"])
+
+    init_process_group(backend="nccl", world_size=world_size, rank=rank_global)
+    torch.cuda.set_device(rank_local)
 
 def checkpoint(model:nn.Module, optimizer:torch.optim.Optimizer, filename):
     """
