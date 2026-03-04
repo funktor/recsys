@@ -388,7 +388,7 @@ def train_func(config: dict):
     batch_iter_train = dataloader.prepare_batches_prefetch(ratings_train, movies_dataset, batch_size, device=rank_local, num_workers=num_workers)
 
     # Get validation batch iterator
-    batch_iter_val = dataloader.prepare_batches_prefetch(ratings_val, movies_dataset, batch_size, device=rank_local, prefetch_factor=0)
+    batch_iter_val = dataloader.prepare_batches_prefetch(ratings_val, movies_dataset, batch_size=16, device=rank_local, prefetch_factor=0)
 
     for epoch in range(max_num_epochs):
         print(f"Starting epoch {epoch+1}...")
@@ -643,6 +643,7 @@ if __name__ == "__main__":
             --accumulate_grad_batches 4 \
             --model_out_dir "/tmp/model_outputs" >output.log 2>&1 &
 
+
     nohup torchrun \
         --nnodes=2 \
         --node_rank=1 \
@@ -659,7 +660,8 @@ if __name__ == "__main__":
             --accumulate_grad_batches 4 \
             --model_out_dir "/tmp/model_outputs" >output.log 2>&1 &
 
-    mpirun -np 16 \
+
+    nohup mpirun -np 16 \
         -H 240.76.37.135:8,240.76.41.135:8 \
         -x MASTER_ADDR=240.76.37.135 \
         -x MASTER_PORT=29500 \
@@ -675,7 +677,7 @@ if __name__ == "__main__":
                 --num_epochs 10 \
                 --num_workers 4 \
                 --accumulate_grad_batches 4 \
-                --model_out_dir "/tmp/model_outputs"
+                --model_out_dir "/tmp/model_outputs" >output.log 2>&1 &
 
     sudo apt update
     sudo apt install openssh-server -y
