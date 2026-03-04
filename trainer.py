@@ -291,6 +291,7 @@ def train_func(config: dict):
     Main training method
     """
     try:
+        print(os.environ.keys())
         print("Setting up DDP...")
         if dist.is_initialized() is False:
             ddp_setup()
