@@ -294,201 +294,115 @@ def train_func(config: dict):
     """
     Main training method
     """
-    # try:
-    print("Setting up DDP...")
-    if dist.is_initialized() is False:
-        ddp_setup()
+    try:
+        print("Setting up DDP...")
+        if dist.is_initialized() is False:
+            ddp_setup()
 
-    rank_local  = int(os.environ["OMPI_COMM_WORLD_LOCAL_RANK"])
-    rank_global = int(os.environ["OMPI_COMM_WORLD_RANK"])
-    world_size  = int(os.environ["OMPI_COMM_WORLD_SIZE"])
+        rank_local  = int(os.environ["OMPI_COMM_WORLD_LOCAL_RANK"])
+        rank_global = int(os.environ["OMPI_COMM_WORLD_RANK"])
+        world_size  = int(os.environ["OMPI_COMM_WORLD_SIZE"])
 
-    num_gpu_workers = int(torch.cuda.device_count())
+        num_gpu_workers = int(torch.cuda.device_count())
 
-    print(f"WORLD SIZE = {world_size}")
+        print(f"WORLD SIZE = {world_size}")
 
-    VOCAB_PATH = "/tmp/vocabulary.pkl"
+        VOCAB_PATH = "/tmp/vocabulary.pkl"
 
-    gcs_bucket_name = config["gcs_bucket"]
-    gcs_prefix = config["gcs_prefix"]
-    gcs_data_dir = config["gcs_data_dir"]
-    batch_size = config["batch_size"]
-    max_num_epochs = config["num_epochs"]
-    accumulate_grad_batches = config["accumulate_grad_batches"]
-    model_path = config["existing_model_path"]
-    max_num_batches = config["max_num_batches"]
-    num_workers = min(mp.cpu_count()-1, config["num_workers"])
-    model_out_dir = config["model_out_dir"]
+        gcs_bucket_name = config["gcs_bucket"]
+        gcs_prefix = config["gcs_prefix"]
+        gcs_data_dir = config["gcs_data_dir"]
+        batch_size = config["batch_size"]
+        max_num_epochs = config["num_epochs"]
+        accumulate_grad_batches = config["accumulate_grad_batches"]
+        model_path = config["existing_model_path"]
+        max_num_batches = config["max_num_batches"]
+        num_workers = min(mp.cpu_count()-1, config["num_workers"])
+        model_out_dir = config["model_out_dir"]
 
-    datasets_gcs_path = f"gs://{gcs_bucket_name}/{gcs_prefix}/{gcs_data_dir}"
+        datasets_gcs_path = f"gs://{gcs_bucket_name}/{gcs_prefix}/{gcs_data_dir}"
 
-    ratings_train_path = f"{datasets_gcs_path}/train/*.parquet"
-    path_vocab = f"{datasets_gcs_path}/vocabulary.pkl"
+        ratings_train_path = f"{datasets_gcs_path}/train/*.parquet"
+        path_vocab = f"{datasets_gcs_path}/vocabulary.pkl"
 
-    # Get datasets as huggingface datasets format
-    print("Getting datasets...")
-    ratings_train, ratings_val, movies_dataset = dataloader.get_datasets(datasets_gcs_path, world_size, rank_global)
+        # Get datasets as huggingface datasets format
+        print("Getting datasets...")
+        ratings_train, ratings_val, movies_dataset = dataloader.get_datasets(datasets_gcs_path, world_size, rank_global)
 
-    # Assign each GPU equal number of batches
-    num_train_data = count_rows_in_gcs_parquet(ratings_train_path)
-    print(f"Total Training Data = {num_train_data}")
-    print(f"Effective batch size = {world_size*batch_size}")
+        # Assign each GPU equal number of batches
+        num_train_data = count_rows_in_gcs_parquet(ratings_train_path)
+        print(f"Total Training Data = {num_train_data}")
+        print(f"Effective batch size = {world_size*batch_size}")
 
-    batches_per_epoch = num_train_data // (world_size*batch_size)
-    batches_per_epoch = min(batches_per_epoch, max_num_batches)
+        batches_per_epoch = num_train_data // (world_size*batch_size)
+        batches_per_epoch = min(batches_per_epoch, max_num_batches)
 
-    print(f"Rank={rank_global}: Train data size   = {ratings_train.shape[0]}")
-    print(f"Rank={rank_global}: Val data size     = {ratings_val.shape[0]}")
-    print(f"Rank={rank_global}: Batches per epoch = {batches_per_epoch}")
+        print(f"Rank={rank_global}: Train data size   = {ratings_train.shape[0]}")
+        print(f"Rank={rank_global}: Val data size     = {ratings_val.shape[0]}")
+        print(f"Rank={rank_global}: Batches per epoch = {batches_per_epoch}")
 
-    # Download vocabulary to local path only by rank=0 worker. Need to synchronize using marker file 
-    if rank_local == 0:
-        dataloader.download_vocabulary(path_vocab, VOCAB_PATH)
-        for i in range(num_gpu_workers):
-            Path(f"/tmp/marker_file_{i}.txt").touch()
+        # Download vocabulary to local path only by rank=0 worker. Need to synchronize using marker file 
+        if rank_local == 0:
+            dataloader.download_vocabulary(path_vocab, VOCAB_PATH)
+            for i in range(num_gpu_workers):
+                Path(f"/tmp/marker_file_{i}.txt").touch()
 
-    while True:
-        if os.path.exists(f"/tmp/marker_file_{rank_local}.txt"):
-            Path(f"/tmp/marker_file_{rank_local}.txt").unlink()
-            break
-
-    print("Reading vocabulary...")
-    vocabulary = dataloader.get_vocabulary(VOCAB_PATH)
-
-    print("Getting model and optimizer...")
-    rec, optimizer = get_trainer_and_optimizer(vocabulary, rank_local)
-
-    # Load existing model if model_path provided
-    if model_path and os.path.exists(model_path):
-        rec_st, optimizer_st = load_model(model_path)
-        rec.load_state_dict(rec_st)
-        optimizer.load_state_dict(optimizer_st)
-    
-    # Wrap model in DDP
-    rec = DDP(rec, device_ids=[rank_local], find_unused_parameters=True)
-    best_vloss = float("Inf")
-
-    # Create path for storing checkpoints and saving final model
-    if rank_global == 0:
-        os.makedirs(model_out_dir, exist_ok=True)
-
-    # Initialize optimizer
-    optimizer.zero_grad()
-
-    # Initialize loss
-    criterion = nn.MSELoss()
-    scheduler = \
-        CosineWarmupScheduler(
-            optimizer, 
-            warmup=50, 
-            max_iters=batches_per_epoch*max_num_epochs/accumulate_grad_batches
-        )
-    
-    # Get training batch iterator
-    batch_iter_train = dataloader.prepare_batches_prefetch(ratings_train, movies_dataset, batch_size, device=rank_local, num_workers=num_workers)
-
-    # Get validation batch iterator
-    batch_iter_val = dataloader.prepare_batches_prefetch(ratings_val, movies_dataset, batch_size=16, device=rank_local, prefetch_factor=0)
-
-    for epoch in range(max_num_epochs):
-        print(f"Starting epoch {epoch+1}...")
-        start_epoch_time = time.time()
-        rec.train()
-
-        sum_loss = 0.0
-        sum_rows = 0
-        
-        i = 0
         while True:
-            try:
-                # Get next batch of data and labels
-                batch = next(batch_iter_train)
-
-                data, labels = batch
-                user_ids, user_prev_rated_movie_ids, user_prev_ratings, movie_ids, movie_descriptions, movie_genres, movie_years = data
-
-                output:torch.Tensor = \
-                    rec(
-                        user_ids,
-                        user_prev_rated_movie_ids, 
-                        user_prev_ratings,
-                        movie_ids, 
-                        movie_descriptions, 
-                        movie_genres, 
-                        movie_years
-                    )
-                
-                # Calculate batch loss
-                batch_loss:torch.Tensor = criterion(output.contiguous(), labels.contiguous())
-                batch_loss /= accumulate_grad_batches
-
-                sum_loss += output.shape[0]*batch_loss.item()
-                sum_rows += output.shape[0]
-
-                batch_loss.backward()
-
-                # Accumulate batches to compute gradient
-                if (i+1) % accumulate_grad_batches == 0:
-                    # Broadcast total loss and total number of rows to all gpu workers to calculate avg loss
-                    acc_loss = torch.Tensor([sum_loss, sum_rows]).to(rank_local)
-                    dist.reduce(acc_loss, dst=0, op=dist.ReduceOp.SUM)
-                    acc_loss = acc_loss.tolist()
-                    avg_loss = acc_loss[0]/acc_loss[1]
-
-                    # Print loss by rank=0 worker
-                    if rank_global == 0:
-                        print(f"Epoch: {epoch+1}, Batch: {i+1}, Average Loss: {avg_loss}")
-
-                    # Compute gradients
-                    nn.utils.clip_grad_norm_(rec.parameters(), max_norm=1.0)
-                    optimizer.step()
-                    scheduler.step()
-                    optimizer.zero_grad()
-
-                i += 1
-                if i >= batches_per_epoch:
-                    break
-
-            except StopIteration:
+            if os.path.exists(f"/tmp/marker_file_{rank_local}.txt"):
+                Path(f"/tmp/marker_file_{rank_local}.txt").unlink()
                 break
 
-        # Do same for remaining batches (not divisible by accumulate grad batches)
-        acc_loss = torch.Tensor([sum_loss, sum_rows]).to(rank_local)
-        dist.reduce(acc_loss, dst=0, op=dist.ReduceOp.SUM)
-        acc_loss = acc_loss.tolist()
-        avg_loss = acc_loss[0]/acc_loss[1]
+        print("Reading vocabulary...")
+        vocabulary = dataloader.get_vocabulary(VOCAB_PATH)
 
+        print("Getting model and optimizer...")
+        rec, optimizer = get_trainer_and_optimizer(vocabulary, rank_local)
+
+        # Load existing model if model_path provided
+        if model_path and os.path.exists(model_path):
+            rec_st, optimizer_st = load_model(model_path)
+            rec.load_state_dict(rec_st)
+            optimizer.load_state_dict(optimizer_st)
+        
+        # Wrap model in DDP
+        rec = DDP(rec, device_ids=[rank_local], find_unused_parameters=True)
+        best_vloss = float("Inf")
+
+        # Create path for storing checkpoints and saving final model
         if rank_global == 0:
-            print(f"Epoch: {epoch+1}, Batch: {i+1}, Average Loss: {avg_loss}")
+            os.makedirs(model_out_dir, exist_ok=True)
 
-        nn.utils.clip_grad_norm_(rec.parameters(), max_norm=1.0)
-        optimizer.step()
-        scheduler.step()
+        # Initialize optimizer
         optimizer.zero_grad()
 
-        end_epoch_time = time.time()
+        # Initialize loss
+        criterion = nn.MSELoss()
+        scheduler = \
+            CosineWarmupScheduler(
+                optimizer, 
+                warmup=50, 
+                max_iters=batches_per_epoch*max_num_epochs/accumulate_grad_batches
+            )
+        
+        # Get training batch iterator
+        batch_iter_train = dataloader.prepare_batches_prefetch(ratings_train, movies_dataset, batch_size, device=rank_local, num_workers=num_workers)
 
-        duration = (end_epoch_time-start_epoch_time)/60
-        duration = torch.Tensor([duration]).to(rank_local)
-        dist.reduce(duration, dst=0, op=dist.ReduceOp.SUM)
-        duration = duration.tolist()
+        # Get validation batch iterator
+        batch_iter_val = dataloader.prepare_batches_prefetch(ratings_val, movies_dataset, batch_size=16, device=rank_local, prefetch_factor=0)
 
-        if rank_global == 0:
-            print(f"Training Time for epoch {epoch+1} = {duration[0]/world_size} minutes")
+        for epoch in range(max_num_epochs):
+            print(f"Starting epoch {epoch+1}...")
+            start_epoch_time = time.time()
+            rec.train()
 
-
-        print(f"Running validation for epoch {epoch+1}...")
-        # Do validation
-        rec.eval()
-
-        with torch.no_grad():
             sum_loss = 0.0
             sum_rows = 0
-
+            
             i = 0
             while True:
                 try:
-                    batch = next(batch_iter_val)
+                    # Get next batch of data and labels
+                    batch = next(batch_iter_train)
 
                     data, labels = batch
                     user_ids, user_prev_rated_movie_ids, user_prev_ratings, movie_ids, movie_descriptions, movie_genres, movie_years = data
@@ -503,83 +417,169 @@ def train_func(config: dict):
                             movie_genres, 
                             movie_years
                         )
-                
-                    batch_loss:torch.Tensor = criterion(output.cpu().contiguous(), labels.cpu().contiguous())
+                    
+                    # Calculate batch loss
+                    batch_loss:torch.Tensor = criterion(output.contiguous(), labels.contiguous())
+                    batch_loss /= accumulate_grad_batches
 
                     sum_loss += output.shape[0]*batch_loss.item()
                     sum_rows += output.shape[0]
 
-                    if rank_global == 0:
-                        print(f"Epoch: {epoch+1}, Batch: {i+1}, Loss (Rank 0): {sum_loss/sum_rows}")
+                    batch_loss.backward()
 
-                    # Clear cache after each 10 batches
-                    if (i+1) % 10:
-                        torch.cuda.empty_cache()
-                        gc.collect()
+                    # Accumulate batches to compute gradient
+                    if (i+1) % accumulate_grad_batches == 0:
+                        # Broadcast total loss and total number of rows to all gpu workers to calculate avg loss
+                        acc_loss = torch.Tensor([sum_loss, sum_rows]).to(rank_local)
+                        dist.reduce(acc_loss, dst=0, op=dist.ReduceOp.SUM)
+                        acc_loss = acc_loss.tolist()
+                        avg_loss = acc_loss[0]/acc_loss[1]
+
+                        # Print loss by rank=0 worker
+                        if rank_global == 0:
+                            print(f"Epoch: {epoch+1}, Batch: {i+1}, Average Loss: {avg_loss}")
+
+                        # Compute gradients
+                        nn.utils.clip_grad_norm_(rec.parameters(), max_norm=1.0)
+                        optimizer.step()
+                        scheduler.step()
+                        optimizer.zero_grad()
 
                     i += 1
-
-                    if i >= max_num_batches:
+                    if i >= batches_per_epoch:
                         break
 
                 except StopIteration:
                     break
-            
-            # Compute average validation loss after 1st epoch
-            vloss = torch.Tensor([sum_loss, sum_rows]).to(rank_local)
-            dist.reduce(vloss, dst=0, op=dist.ReduceOp.SUM)
 
-            vloss = vloss.tolist()
-            avg_vloss = vloss[0]/vloss[1]
+            # Do same for remaining batches (not divisible by accumulate grad batches)
+            acc_loss = torch.Tensor([sum_loss, sum_rows]).to(rank_local)
+            dist.reduce(acc_loss, dst=0, op=dist.ReduceOp.SUM)
+            acc_loss = acc_loss.tolist()
+            avg_loss = acc_loss[0]/acc_loss[1]
 
             if rank_global == 0:
-                print(f"Average Validation Loss: {avg_vloss}")
-                print()
-            
-            # Checkpoint only through rank=0 worker because same weights across all workers after sync
+                print(f"Epoch: {epoch+1}, Batch: {i+1}, Average Loss: {avg_loss}")
+
+            nn.utils.clip_grad_norm_(rec.parameters(), max_norm=1.0)
+            optimizer.step()
+            scheduler.step()
+            optimizer.zero_grad()
+
+            end_epoch_time = time.time()
+
+            duration = (end_epoch_time-start_epoch_time)/60
+            duration = torch.Tensor([duration]).to(rank_local)
+            dist.reduce(duration, dst=0, op=dist.ReduceOp.SUM)
+            duration = duration.tolist()
+
             if rank_global == 0:
-                print("Checkpointing...")
+                print(f"Training Time for epoch {epoch+1} = {duration[0]/world_size} minutes")
+
+
+            print(f"Running validation for epoch {epoch+1}...")
+            # Do validation
+            rec.eval()
+
+            with torch.no_grad():
+                sum_loss = 0.0
+                sum_rows = 0
+
+                i = 0
+                while True:
+                    try:
+                        batch = next(batch_iter_val)
+
+                        data, labels = batch
+                        user_ids, user_prev_rated_movie_ids, user_prev_ratings, movie_ids, movie_descriptions, movie_genres, movie_years = data
+
+                        output:torch.Tensor = \
+                            rec(
+                                user_ids,
+                                user_prev_rated_movie_ids, 
+                                user_prev_ratings,
+                                movie_ids, 
+                                movie_descriptions, 
+                                movie_genres, 
+                                movie_years
+                            )
+                    
+                        batch_loss:torch.Tensor = criterion(output.cpu().contiguous(), labels.cpu().contiguous())
+
+                        sum_loss += output.shape[0]*batch_loss.item()
+                        sum_rows += output.shape[0]
+
+                        if rank_global == 0:
+                            print(f"Epoch: {epoch+1}, Batch: {i+1}, Loss (Rank 0): {sum_loss/sum_rows}")
+
+                        # Clear cache after each 10 batches
+                        if (i+1) % 10:
+                            torch.cuda.empty_cache()
+                            gc.collect()
+
+                        i += 1
+
+                        if i >= max_num_batches:
+                            break
+
+                    except StopIteration:
+                        break
                 
-                if avg_vloss < best_vloss:
-                    best_vloss = avg_vloss
-                    checkpoint(rec.module, optimizer, os.path.join(model_out_dir, f"checkpoint-best-vloss.pth"))
-    
-    model:RecommenderSystem = rec.module
+                # Compute average validation loss after 1st epoch
+                vloss = torch.Tensor([sum_loss, sum_rows]).to(rank_local)
+                dist.reduce(vloss, dst=0, op=dist.ReduceOp.SUM)
 
-    # Save final model by rank=0 worker
-    if rank_global == 0:
-        print("Saving model...")
-        checkpoint(model, optimizer, os.path.join(model_out_dir, f"final_model.pth"))
+                vloss = vloss.tolist()
+                avg_vloss = vloss[0]/vloss[1]
 
-        print("Uploading model to GCS...")
-        upload_directory_with_transfer_manager(
-            gcs_bucket_name, 
-            model_out_dir, 
-            f"{gcs_prefix}/{model_out_dir}"
+                if rank_global == 0:
+                    print(f"Average Validation Loss: {avg_vloss}")
+                    print()
+                
+                # Checkpoint only through rank=0 worker because same weights across all workers after sync
+                if rank_global == 0:
+                    print("Checkpointing...")
+                    
+                    if avg_vloss < best_vloss:
+                        best_vloss = avg_vloss
+                        checkpoint(rec.module, optimizer, os.path.join(model_out_dir, f"checkpoint-best-vloss.pth"))
+        
+        model:RecommenderSystem = rec.module
+
+        # Save final model by rank=0 worker
+        if rank_global == 0:
+            print("Saving model...")
+            checkpoint(model, optimizer, os.path.join(model_out_dir, f"final_model.pth"))
+
+            print("Uploading model to GCS...")
+            upload_directory_with_transfer_manager(
+                gcs_bucket_name, 
+                model_out_dir, 
+                f"{gcs_prefix}/{model_out_dir}"
+            )
+
+        # Save movie embeddings and user embeddings
+        save_embeddings_and_metadata(
+            model,
+            datasets_gcs_path,
+            movies_dataset,
+            gcs_bucket_name,
+            gcs_prefix,
+            world_size,
+            rank_global,
+            rank_local
         )
 
-    # Save movie embeddings and user embeddings
-    save_embeddings_and_metadata(
-        model,
-        datasets_gcs_path,
-        movies_dataset,
-        gcs_bucket_name,
-        gcs_prefix,
-        world_size,
-        rank_global,
-        rank_local
-    )
+    except Exception as e:
+        print(e)
+    finally:
+        # delete the marker files
+        if os.path.exists(f"/tmp/marker_file_{rank_local}.txt"):
+            Path(f"/tmp/marker_file_{rank_local}.txt").unlink()
 
-    # except Exception as e:
-    #     print(e)
-    # finally:
-    #     # delete the marker files
-    #     if os.path.exists(f"/tmp/marker_file_{rank_local}.txt"):
-    #         Path(f"/tmp/marker_file_{rank_local}.txt").unlink()
-
-    #     # destroy ddp processes
-    #     if dist.is_initialized():
-    #         dist.destroy_process_group()
+        # destroy ddp processes
+        if dist.is_initialized():
+            dist.destroy_process_group()
 
 
 if __name__ == "__main__":
